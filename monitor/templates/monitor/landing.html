@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Uniwatch | Smart Server Monitoring for Developers</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            /* Deeper dark navy as requested */
+            --bg-base: #030409;
+            --bg-elevated: #0a0b14;
+            --bg-card: rgba(15, 17, 30, 0.6);
+            --border-primary: rgba(255, 255, 255, 0.08);
+            --border-glow: rgba(0, 210, 255, 0.3);
+            
+            --text-main: #f8f9fa;
+            --text-muted: #9ca3af;
+            
+            /* Accent Colors */
+            --neon-blue: #00d2ff;
+            --neon-orange: #ff6a00;
+            --neon-green: #10b981;
+            
+            --gradient-primary: linear-gradient(135deg, var(--neon-blue), var(--neon-orange));
+            --radius-lg: 16px;
+            --radius-md: 12px;
+            --radius-full: 9999px;
+            
+            --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        * {
+            margin: 0; padding: 0; box-sizing: border-box;
+            font-family: 'Inter', sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-base);
+            color: var(--text-main);
+            overflow-x: hidden;
+            line-height: 1.6;
+        }
+
+        /* Glassmorphism Utilities */
+        .glass {
+            background: var(--bg-card);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid var(--border-primary);
+        }
+        
+        .glow-text {
+            background: var(--gradient-primary);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-shadow: 0 0 30px rgba(0, 210, 255, 0.3);
+        }
+
+        /* Ambient Background Glow */
+        .ambient-glow {
+            position: absolute;
+            border-radius: 50%;
+            filter: blur(120px);
+            z-index: -1;
+            opacity: 0.15;
+            pointer-events: none;
+        }
+        .glow-1 { top: -10%; left: -10%; width: 500px; height: 500px; background: var(--neon-blue); }
+        .glow-2 { top: 40%; right: -10%; width: 600px; height: 600px; background: var(--neon-orange); }
+        .glow-3 { bottom: -10%; left: 20%; width: 400px; height: 400px; background: var(--neon-green); }
+
+        /* Typography */
+        h1, h2, h3 { line-height: 1.2; letter-spacing: -0.02em; }
+        h2 { font-size: 2.5rem; margin-bottom: 1rem; text-align: center; }
+        .subtitle { color: var(--text-muted); font-size: 1.1rem; text-align: center; max-width: 600px; margin: 0 auto; }
+
+        /* Layout */
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 2rem;
+        }
+        section { padding: 6rem 0; position: relative; }
+
+        /* Buttons */
+        .btn {
+            display: inline-flex; align-items: center; justify-content: center;
+            padding: 0.75rem 1.75rem; border-radius: var(--radius-full);
+            font-weight: 600; text-decoration: none; transition: var(--transition);
+            cursor: pointer; border: none; font-size: 1rem;
+        }
+        .btn-primary {
+            background: var(--gradient-primary); color: #fff;
+            box-shadow: 0 4px 20px rgba(0, 210, 255, 0.25);
+        }
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 30px rgba(0, 210, 255, 0.4);
+        }
+        .btn-secondary {
+            background: rgba(255,255,255,0.05); color: var(--text-main);
+            border: 1px solid var(--border-primary);
+        }
+        .btn-secondary:hover { background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.2); }
+
+        /* NAVBAR */
+        nav {
+            position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+            padding: 1rem 0; transition: var(--transition);
+        }
+        nav.scrolled {
+            background: rgba(3, 4, 9, 0.85); backdrop-filter: blur(12px);
+            border-bottom: 1px solid var(--border-primary);
+        }
+        .nav-inner { display: flex; justify-content: space-between; align-items: center; }
+        .logo { font-size: 1.5rem; font-weight: 800; color: #fff; text-decoration: none; display: flex; align-items: center; gap: 8px; }
+        .logo-icon { color: var(--neon-blue); }
+        .nav-links { display: flex; gap: 2rem; }
+        .nav-links a { color: var(--text-muted); text-decoration: none; font-size: 0.9rem; font-weight: 500; transition: var(--transition); }
+        .nav-links a:hover { color: #fff; }
+
+        @media (max-width: 768px) { .nav-links { display: none; } }
+
+        /* HERO SECTION */
+        .hero { padding: 10rem 0 6rem; text-align: center; position: relative; overflow: hidden; }
+        .hero h1 { font-size: clamp(2.5rem, 6vw, 4.5rem); margin-bottom: 1.5rem; max-width: 900px; margin-inline: auto; }
+        .hero p { font-size: 1.25rem; color: var(--text-muted); max-width: 650px; margin: 0 auto 2.5rem; }
+        .hero-cta { display: flex; gap: 1rem; justify-content: center; margin-bottom: 4rem; }
+
+        /* MOCKUP PREVIEW */
+        .dashboard-preview {
+            position: relative; margin: 0 auto; max-width: 1000px;
+            border-radius: var(--radius-lg); padding: 1px;
+            background: linear-gradient(180deg, var(--border-glow), transparent);
+            box-shadow: 0 20px 80px rgba(0, 210, 255, 0.15);
+            transform: perspective(1000px) rotateX(2deg);
+        }
+        .preview-inner {
+            background: var(--bg-elevated); border-radius: calc(var(--radius-lg) - 1px);
+            overflow: hidden; width: 100%; aspect-ratio: 16/9;
+            display: flex; flex-direction: column;
+        }
+        .preview-header { height: 40px; background: rgba(255,255,255,0.02); display: flex; align-items: center; padding: 0 1rem; gap: 8px; border-bottom: 1px solid var(--border-primary); }
+        .dot { width: 10px; height: 10px; border-radius: 50%; background: #4b5563; }
+        .dot.red { background: #ef4444; } .dot.yellow { background: #f59e0b; } .dot.green { background: #10b981; }
+        
+        .preview-body { flex: 1; padding: 1.5rem; background: url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAiIGhlaWdodD0iMjAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGNpcmNsZSBjeD0iMSIgY3k9IjEiIHI9IjEiIGZpbGw9InJnYmEoMjU1LDI1NSwyNTUsMC4wNSkiLz48L3N2Zz4='); }
+        .wireframe-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 1rem; height: 100%; }
+        .wireframe-box { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.05); border-radius: 8px; }
+
+        /* FEATURES SECTION */
+        .features-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1.5rem; margin-top: 4rem; }
+        .feature-card { padding: 2rem; border-radius: var(--radius-lg); transition: var(--transition); border-top: 1px solid rgba(255,255,255,0.1); }
+        .feature-card:hover { transform: translateY(-5px); border-color: var(--neon-blue); box-shadow: 0 10px 30px rgba(0, 210, 255, 0.1); }
+        .feature-icon { font-size: 2rem; margin-bottom: 1rem; color: var(--neon-blue); }
+        .feature-card h3 { font-size: 1.25rem; margin-bottom: 0.5rem; }
+        .feature-card p { color: var(--text-muted); font-size: 0.95rem; }
+
+        /* HOW IT WORKS */
+        .steps-container { display: flex; flex-direction: column; gap: 2rem; margin-top: 4rem; max-width: 800px; margin-inline: auto; position: relative; }
+        .steps-container::before { content: ''; position: absolute; left: 24px; top: 0; bottom: 0; width: 2px; background: linear-gradient(to bottom, var(--neon-blue), var(--neon-orange)); opacity: 0.3; }
+        .step { display: flex; gap: 2rem; align-items: flex-start; }
+        .step-number { width: 50px; height: 50px; border-radius: 50%; background: var(--bg-elevated); border: 2px solid var(--neon-blue); display: flex; align-items: center; justify-content: center; font-weight: 700; font-family: 'JetBrains Mono', monospace; z-index: 1; box-shadow: 0 0 15px rgba(0,210,255,0.3); }
+        .step-content { flex: 1; padding-top: 0.5rem; }
+        .step-content h3 { margin-bottom: 0.5rem; }
+        @media (min-width: 768px) {
+            .steps-container { flex-direction: row; text-align: center; justify-content: space-between; }
+            .steps-container::before { top: 24px; left: 0; right: 0; bottom: auto; height: 2px; width: 100%; }
+            .step { flex-direction: column; align-items: center; }
+        }
+
+        /* WHY UNIWATCH (Comparison) */
+        .comparison-table { width: 100%; max-width: 900px; margin: 4rem auto 0; border-collapse: collapse; text-align: left; background: var(--bg-card); border-radius: var(--radius-lg); overflow: hidden; border: 1px solid var(--border-primary); }
+        .comparison-table th, .comparison-table td { padding: 1.5rem; border-bottom: 1px solid var(--border-primary); }
+        .comparison-table th { font-weight: 600; color: var(--text-muted); text-transform: uppercase; font-size: 0.85rem; letter-spacing: 1px; }
+        .comparison-table td:nth-child(2) { color: #ef4444; }
+        .comparison-table td:nth-child(3) { color: var(--neon-green); font-weight: 600; background: rgba(16, 185, 129, 0.05); border-left: 1px solid var(--neon-green); border-right: 1px solid var(--neon-green); }
+        .comparison-table th:nth-child(3) { background: rgba(16, 185, 129, 0.05); color: var(--neon-green); border-left: 1px solid var(--neon-green); border-right: 1px solid var(--neon-green); border-top: 1px solid var(--neon-green); }
+        .comparison-table tr:last-child td { border-bottom: none; }
+        .comparison-table tr:last-child td:nth-child(3) { border-bottom: 1px solid var(--neon-green); }
+
+        /* SMART INSIGHTS */
+        .insights-demo { max-width: 600px; margin: 4rem auto 0; display: flex; flex-direction: column; gap: 1.5rem; }
+        .chat-bubble { padding: 1.25rem; border-radius: var(--radius-md); border-bottom-left-radius: 0; background: rgba(255,255,255,0.05); border: 1px solid var(--border-primary); position: relative; }
+        .chat-bubble::before { content: '🤖 ALYx'; position: absolute; top: -12px; left: 16px; background: var(--neon-blue); color: #000; font-size: 0.7rem; font-weight: 700; padding: 2px 8px; border-radius: 4px; }
+        .chat-bubble.alert { border-color: rgba(255, 106, 0, 0.4); background: rgba(255, 106, 0, 0.05); }
+        .chat-bubble.alert::before { content: '⚠️ ALERT'; background: var(--neon-orange); }
+
+        /* PRICING */
+        .pricing-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 2rem; margin-top: 4rem; max-width: 800px; margin-inline: auto; }
+        .pricing-card { padding: 3rem 2rem; border-radius: var(--radius-lg); text-align: center; position: relative; }
+        .pricing-card.glass { border-top: 1px solid rgba(255,255,255,0.2); }
+        .pricing-card.pro { border: 1px solid var(--neon-blue); box-shadow: 0 10px 40px rgba(0,210,255,0.1); transform: scale(1.05); }
+        .pricing-card.pro::before { content: 'Most Popular'; position: absolute; top: -14px; left: 50%; transform: translateX(-50%); background: var(--neon-blue); color: #000; font-size: 0.8rem; font-weight: 700; padding: 4px 12px; border-radius: var(--radius-full); }
+        .price { font-size: 3rem; font-weight: 800; margin: 1.5rem 0; font-family: 'JetBrains Mono', monospace; }
+        .price span { font-size: 1rem; color: var(--text-muted); font-weight: 400; }
+        .pricing-features { list-style: none; margin: 2rem 0; text-align: left; }
+        .pricing-features li { margin-bottom: 1rem; display: flex; align-items: center; gap: 8px; color: var(--text-muted); }
+        .pricing-features li::before { content: '✓'; color: var(--neon-green); font-weight: 700; }
+
+        /* FOOTER */
+        footer { padding: 4rem 0 2rem; border-top: 1px solid var(--border-primary); margin-top: 6rem; text-align: center; }
+        .footer-logo { font-size: 1.25rem; font-weight: 700; margin-bottom: 1rem; display: inline-flex; align-items: center; gap: 8px; }
+        .footer-links { margin-bottom: 2rem; display: flex; gap: 1.5rem; justify-content: center; }
+        .footer-links a { color: var(--text-muted); text-decoration: none; transition: var(--transition); }
+        .footer-links a:hover { color: #fff; }
+        .copyright { color: var(--text-muted); font-size: 0.85rem; }
+    </style>
+</head>
+<body>
+
+    <!-- Ambient Glows -->
+    <div class="ambient-glow glow-1"></div>
+    <div class="ambient-glow glow-2"></div>
+    <div class="ambient-glow glow-3"></div>
+
+    <!-- Navigation -->
+    <nav id="navbar">
+        <div class="container nav-inner">
+            <a href="#" class="logo">
+                <span class="logo-icon">⚡</span> Uniwatch
+            </a>
+            <div class="nav-links">
+                <a href="#features">Features</a>
+                <a href="#how-it-works">How it Works</a>
+                <a href="#pricing">Pricing</a>
+            </div>
+            <div>
+                <a href="{% url 'dashboard' %}" class="btn btn-secondary" style="padding: 0.5rem 1.25rem; font-size: 0.9rem;">Sign In</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- SECTION 1: HERO -->
+    <header class="hero">
+        <div class="container">
+            <h1>Monitor Your Servers in <span class="glow-text">Seconds</span>, Not Hours.</h1>
+            <p>Connect any server instantly with SSH. Get automated deployments of monitoring agents and real-time AI-powered system insights. Zero complex configuration.</p>
+            
+            <div class="hero-cta">
+                <a href="{% url 'dashboard' %}" class="btn btn-primary">Get Started Free</a>
+                <a href="#demo" class="btn btn-secondary">View Demo</a>
+            </div>
+
+            <div class="dashboard-preview" id="demo">
+                <div class="preview-inner">
+                    <div class="preview-header">
+                        <div class="dot red"></div><div class="dot yellow"></div><div class="dot green"></div>
+                        <div style="margin-left:1rem; font-size:0.75rem; color:var(--text-muted); font-family:'JetBrains Mono';">uniwatch.app/dashboard</div>
+                    </div>
+                    <div class="preview-body">
+                        <!-- Simulated layout mirroring our actual dashboard structure -->
+                        <div style="display:flex; justify-content:space-between; margin-bottom:1rem; border-bottom:1px solid rgba(255,255,255,0.05); padding-bottom:1rem;">
+                            <div style="font-size:1.5rem; font-weight:700;">PROD-SERVER-01</div>
+                            <div style="color:var(--neon-green); font-size:0.85rem; padding:4px 12px; background:rgba(16,185,129,0.1); border-radius:20px;">● Healthy</div>
+                        </div>
+                        <div class="wireframe-grid">
+                            <div style="display: flex; flex-direction: column; gap: 1rem;">
+                                <div style="display: flex; gap: 1rem; height: 100px;">
+                                    <div class="wireframe-box" style="flex:1; display:flex; flex-direction:column; justify-content:center; padding:1rem;">
+                                        <div style="font-size:0.7rem; color:#9ca3af;">CPU USAGE</div>
+                                        <div style="font-size:1.8rem; font-weight:700;">42%</div>
+                                    </div>
+                                    <div class="wireframe-box" style="flex:1; display:flex; flex-direction:column; justify-content:center; padding:1rem;">
+                                        <div style="font-size:0.7rem; color:#9ca3af;">MEMORY</div>
+                                        <div style="font-size:1.8rem; font-weight:700;">68%</div>
+                                    </div>
+                                </div>
+                                <div class="wireframe-box" style="flex:1; background: linear-gradient(to top, rgba(0,210,255,0.1), transparent); border-bottom: 2px solid var(--neon-blue);"></div>
+                            </div>
+                            <div style="display: flex; flex-direction: column; gap: 1rem;">
+                                <div class="wireframe-box" style="flex:1; padding:1rem;">
+                                    <div style="font-size:0.7rem; color:#9ca3af; margin-bottom:0.5rem;">ALERTS</div>
+                                    <div style="font-size:0.75rem; color:#ef4444; margin-bottom:4px;">⚠️ High IOPS Detected</div>
+                                    <div style="font-size:0.75rem; color:#f59e0b;">⚠️ Database container memory leak</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- SECTION 2: CORE VALUE PROPOSITION -->
+    <section id="features" class="glass" style="border-left:none; border-right:none; background:rgba(10,11,20,0.5);">
+        <div class="container">
+            <h2>Built differently for modern teams</h2>
+            <p class="subtitle">We built Uniwatch because existing enterprise tools were too bloated, and DIY Grafana stacks took too long to configure.</p>
+            
+            <div class="features-grid">
+                <div class="feature-card glass">
+                    <div class="feature-icon">🚀</div>
+                    <h3>Zero Setup Monitoring</h3>
+                    <p>Provide an IP and SSH key. We automatically deploy Node Exporter and connect the telemetry instantly.</p>
+                </div>
+                <div class="feature-card glass">
+                    <div class="feature-icon">⚡</div>
+                    <h3>Real-Time Metrics</h3>
+                    <p>Monitor your entire infrastructure with sub-second latency precision directly on the edge.</p>
+                </div>
+                <div class="feature-card glass">
+                    <div class="feature-icon">🧠</div>
+                    <h3>Smart Insights</h3>
+                    <p>Raw data is useless without context. Our engine explains exactly why spikes happen in plain english.</p>
+                </div>
+                <div class="feature-card glass">
+                    <div class="feature-icon">🐳</div>
+                    <h3>Containers First</h3>
+                    <p>Native cAdvisor integration means your Docker containers are auto-discovered and tracked instantly.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- SECTION 3: HOW IT WORKS -->
+    <section id="how-it-works">
+        <div class="container">
+            <h2>Monitor in 3 Simple Steps</h2>
+            <p class="subtitle">Go from zero visibility to deep infrastructure insights in under 60 seconds.</p>
+
+            <div class="steps-container">
+                <div class="step">
+                    <div class="step-number">01</div>
+                    <div class="step-content">
+                        <h3>Provide Credentials</h3>
+                        <p style="color:var(--text-muted); font-size:0.9rem;">Input your server IP and a temporary SSH key.</p>
+                    </div>
+                </div>
+                <div class="step">
+                    <div class="step-number" style="border-color:var(--neon-orange);">02</div>
+                    <div class="step-content">
+                        <h3>Auto-Deployment</h3>
+                        <p style="color:var(--text-muted); font-size:0.9rem;">Uniwatch securely installs Prometheus exporters over SSH.</p>
+                    </div>
+                </div>
+                <div class="step">
+                    <div class="step-number" style="border-color:var(--neon-green);">03</div>
+                    <div class="step-content">
+                        <h3>Instant Analytics</h3>
+                        <p style="color:var(--text-muted); font-size:0.9rem;">Dashboards populate instantly. Alerts go live automatically.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- SECTION 4 / 5: WHY UNIWATCH (Comparison) -->
+    <section style="background: rgba(0, 210, 255, 0.02); border-top: 1px solid rgba(0, 210, 255, 0.1); border-bottom: 1px solid rgba(0, 210, 255, 0.1);">
+        <div class="container">
+            <h2>Why switch to Uniwatch?</h2>
+            <p class="subtitle">Stop wasting engineering cycles managing monitoring infrastructure.</p>
+
+            <table class="comparison-table">
+                <thead>
+                    <tr>
+                        <th>Feature</th>
+                        <th>Traditional Tools</th>
+                        <th>Uniwatch</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Installation</td>
+                        <td>Manual Agent Configuration</td>
+                        <td>Automated via SSH</td>
+                    </tr>
+                    <tr>
+                        <td>Time to First Metric</td>
+                        <td>45+ Minutes</td>
+                        <td>&lt; 60 Seconds</td>
+                    </tr>
+                    <tr>
+                        <td>User Interface</td>
+                        <td>Cluttered Enterprise Menus</td>
+                        <td>Minimal Developer-First Design</td>
+                    </tr>
+                    <tr>
+                        <td>Data Overload</td>
+                        <td>Creates dashboard fatigue</td>
+                        <td>Distills data down to Smart Insights</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <!-- SECTION 6: SMART INSIGHTS -->
+    <section>
+        <div class="container">
+            <h2>Don't just track. Understand.</h2>
+            <p class="subtitle">Our Smart Insights engine acts as a junior DevOps engineer, watching your graphs 24/7 and explaining anomalies in plain english.</p>
+
+            <div class="insights-demo">
+                <div class="chat-bubble alert">
+                    Memory baseline exceeded. Server <strong>PROD-DB-02</strong> spiked by 42% in the last 15 minutes.
+                </div>
+                <div class="chat-bubble">
+                    <strong>Diagnosis:</strong> The Docker container `redis-cache` initiated a bulk persist operation. No action required, returning to normal bounds.
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- SECTION 7: SOCIAL PROOF -->
+    <section>
+        <div class="container" style="text-align: center;">
+            <p style="color: var(--neon-blue); font-weight: 700; letter-spacing: 2px; text-transform: uppercase; font-size: 0.8rem; margin-bottom: 2rem;">Loved by Indie Hackers & Startup Teams</p>
+            <div style="display:flex; justify-content:center; gap: 2rem; flex-wrap: wrap;">
+                <div class="glass" style="padding: 1.5rem; border-radius: var(--radius-md); max-width: 350px; text-align:left;">
+                    <p style="font-style: italic; color: #d1d5db; margin-bottom:1rem;">"Finally, a monitoring tool that doesn't feel like a 2005 enterprise nightmare. Connected my 3 droplets in exactly 2 minutes."</p>
+                    <div style="display:flex; align-items:center; gap:12px;">
+                        <div style="width:40px; height:40px; border-radius:50%; background:#374151;"></div>
+                        <div>
+                            <div style="font-weight:700; font-size:0.9rem;">Alex M.</div>
+                            <div style="font-size:0.75rem; color:var(--text-muted);">Solo Developer</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="glass" style="padding: 1.5rem; border-radius: var(--radius-md); max-width: 350px; text-align:left;">
+                    <p style="font-style: italic; color: #d1d5db; margin-bottom:1rem;">"The automated deployment via SSH is literal magic. We ripped out our Datadog agents the same day we tried Uniwatch."</p>
+                    <div style="display:flex; align-items:center; gap:12px;">
+                        <div style="width:40px; height:40px; border-radius:50%; background:#374151;"></div>
+                        <div>
+                            <div style="font-weight:700; font-size:0.9rem;">Sarah K.</div>
+                            <div style="font-size:0.75rem; color:var(--text-muted);">Startup CTO</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- SECTION 8: PRICING -->
+    <section id="pricing">
+        <div class="container">
+            <h2>Simple, transparent pricing</h2>
+            <p class="subtitle">Start for free. Scale when you need to.</p>
+
+            <div class="pricing-grid">
+                <div class="pricing-card glass">
+                    <h3>Developer</h3>
+                    <div class="price">$0<span>/mo</span></div>
+                    <p style="color:var(--text-muted); font-size:0.9rem;">Perfect for personal projects and indie hackers.</p>
+                    <ul class="pricing-features">
+                        <li>Up to 3 Servers</li>
+                        <li>24h Data Retention</li>
+                        <li>Real-time Dashboards</li>
+                        <li>Community Support</li>
+                    </ul>
+                    <a href="{% url 'dashboard' %}" class="btn btn-secondary" style="width:100%;">Start Free</a>
+                </div>
+                <div class="pricing-card glass pro">
+                    <h3>Startup Pro</h3>
+                    <div class="price">$29<span>/mo</span></div>
+                    <p style="color:var(--text-muted); font-size:0.9rem;">For teams requiring deep analytics and retention.</p>
+                    <ul class="pricing-features">
+                        <li>Unlimited Servers</li>
+                        <li>30-Day Data Retention</li>
+                        <li>Smart AI Insights engine</li>
+                        <li>Priority Support</li>
+                    </ul>
+                    <a href="{% url 'dashboard' %}" class="btn btn-primary" style="width:100%;">Setup Pro</a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- SECTION 9: FINAL CTA -->
+    <section class="hero" style="padding: 6rem 0;">
+        <div class="container">
+            <h2>Start Monitoring Smarter Today</h2>
+            <p>Join the developers reclaiming their time with zero-configuration infrastructure visibility.</p>
+            <div style="margin-top: 2rem;">
+                <a href="{% url 'dashboard' %}" class="btn btn-primary" style="padding: 1rem 2.5rem; font-size:1.1rem;">Deploy Now →</a>
+            </div>
+        </div>
+    </section>
+
+    <!-- FOOTER -->
+    <footer>
+        <div class="container">
+            <div class="footer-logo">
+                <span class="logo-icon">⚡</span> Uniwatch
+            </div>
+            <div class="footer-links">
+                <a href="#">Documentation</a>
+                <a href="#">API</a>
+                <a href="#">GitHub</a>
+                <a href="#">Contact</a>
+            </div>
+            <div class="copyright">
+                &copy; 2026 Uniwatch Inc. Built for developers.
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        // Shrink navbar on scroll
+        window.addEventListener('scroll', () => {
+            const nav = document.getElementById('navbar');
+            if (window.scrollY > 50) {
+                nav.classList.add('scrolled');
+            } else {
+                nav.classList.remove('scrolled');
+            }
+        });
+    </script>
+</body>
+</html>

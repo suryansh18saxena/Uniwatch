@@ -4,6 +4,7 @@ Handles server management, setup orchestration, and metrics display.
 """
 
 from django.shortcuts import render, redirect, get_object_or_404
+from django.http import JsonResponse
 from django.contrib import messages
 from .models import Server
 from .forms import AddServerForm
@@ -11,15 +12,20 @@ from .utils import setup_server
 from .prometheus_client import query_prometheus, get_server_metrics
 
 
+def landing_page(request):
+    """Marketing and acquisition landing page."""
+    return render(request, 'monitor/landing.html')
+
+
 def dashboard(request):
     """Main dashboard showing all monitored servers."""
     servers = Server.objects.all()
-    stats = {
-        'total': servers.count(),
-        'active': servers.filter(is_active=True).count(),
-        'failed': servers.filter(setup_status='failed').count(),
-        'pending': servers.filter(setup_status='pending').count(),
-    }
+    
+    first_server = servers.first()
+    if first_server:
+        return redirect('server_detail', server_id=first_server.id)
+
+    stats = {'total': 0, 'active': 0, 'failed': 0, 'pending': 0}
     return render(request, 'monitor/dashboard.html', {
         'servers': servers,
         'stats': stats,
@@ -73,6 +79,7 @@ def add_server(request):
 def server_detail(request, server_id):
     """Show details and metrics for a specific server."""
     server = get_object_or_404(Server, id=server_id)
+    all_servers = Server.objects.all()
 
     # Try to get live metrics from Prometheus
     metrics = {}
@@ -84,8 +91,23 @@ def server_detail(request, server_id):
 
     return render(request, 'monitor/server_detail.html', {
         'server': server,
+        'all_servers': all_servers,
         'metrics': metrics,
     })
+
+
+def server_timeseries_api(request, server_id):
+    """API endpoint to get historical time-series data for a server."""
+    server = get_object_or_404(Server, id=server_id)
+    if not server.is_active:
+        return JsonResponse({'error': 'Server is not active'}, status=400)
+    
+    try:
+        from .prometheus_client import get_server_timeseries
+        data = get_server_timeseries(server.ip_address, duration_minutes=30)
+        return JsonResponse(data)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
 
 
 def delete_server(request, server_id):
@@ -131,3 +153,132 @@ def retry_setup(request, server_id):
         del ssh_private_key
 
     return redirect('server_detail', server_id=server.id)
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Self-Healing / Auto-Remediation Views
+# ──────────────────────────────────────────────────────────────────────
+
+def api_fix_preview(request, server_id, metric_name):
+    """
+    GET: Return the list of whitelisted fix commands for a metric.
+    Used by the frontend to show a preview before execution.
+    """
+    from .fix_actions import get_fix_actions
+    server = get_object_or_404(Server, id=server_id)
+    actions = get_fix_actions(metric_name)
+    return JsonResponse({
+        'server': server.name,
+        'metric_name': metric_name,
+        'actions': actions,
+        'auto_fix_enabled': server.auto_fix_enabled,
+    })
+
+
+def api_fix_execute(request, server_id, metric_name):
+    """
+    POST: Execute fix actions for a metric on a server.
+    Requires SSH key in POST body. Logs execution to FixExecution model.
+    """
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST required'}, status=405)
+
+    from .fix_actions import get_fix_actions
+    from .remediation import execute_fix
+    from .models import Alert, FixExecution
+    import json as json_module
+
+    server = get_object_or_404(Server, id=server_id)
+    ssh_key = request.POST.get('ssh_private_key', '')
+    alert_id = request.POST.get('alert_id')
+    stop_on_failure = request.POST.get('stop_on_failure', 'false') == 'true'
+
+    # Parse action indices if provided
+    action_indices_str = request.POST.get('action_indices', '')
+    action_indices = None
+    if action_indices_str:
+        try:
+            action_indices = json_module.loads(action_indices_str)
+        except (json_module.JSONDecodeError, TypeError):
+            action_indices = None
+
+    if not ssh_key.strip():
+        return JsonResponse({'error': 'SSH key is required to execute fixes.'}, status=400)
+
+    # Execute the remediation
+    result = execute_fix(
+        ip_address=str(server.ip_address),
+        ssh_user=server.ssh_user,
+        private_key_content=ssh_key,
+        metric_name=metric_name,
+        stop_on_failure=stop_on_failure,
+        action_indices=action_indices,
+    )
+
+    # Get associated alert if provided
+    alert = None
+    if alert_id:
+        try:
+            alert = Alert.objects.get(id=alert_id, server=server)
+        except Alert.DoesNotExist:
+            pass
+
+    # Record execution in the database
+    fix_exec = FixExecution.objects.create(
+        server=server,
+        alert=alert,
+        metric_name=metric_name,
+        commands_run=json_module.dumps(result['results']),
+        summary=result['summary'],
+        status=result['overall_status'],
+        triggered_by='manual',
+    )
+
+    # If fix was successful and alert exists, mark alert as resolved
+    if alert and result['overall_status'] == 'success':
+        from django.utils import timezone
+        alert.status = 'resolved'
+        alert.resolved_at = timezone.now()
+        alert.save()
+
+    return JsonResponse({
+        'execution_id': fix_exec.id,
+        'overall_status': result['overall_status'],
+        'summary': result['summary'],
+        'results': result['results'],
+    })
+
+
+def api_fix_history(request, server_id):
+    """
+    GET: Return the last 20 fix executions for a server.
+    """
+    from .models import FixExecution
+    server = get_object_or_404(Server, id=server_id)
+    executions = FixExecution.objects.filter(server=server)[:20]
+    data = [{
+        'id': e.id,
+        'metric_name': e.metric_name,
+        'status': e.status,
+        'summary': e.summary,
+        'triggered_by': e.triggered_by,
+        'created_at': e.created_at.isoformat(),
+        'commands': e.commands_run_parsed,
+    } for e in executions]
+    return JsonResponse({'history': data})
+
+
+def api_toggle_autofix(request, server_id):
+    """
+    POST: Toggle the auto_fix_enabled setting on a server.
+    """
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST required'}, status=405)
+
+    server = get_object_or_404(Server, id=server_id)
+    server.auto_fix_enabled = not server.auto_fix_enabled
+    server.save(update_fields=['auto_fix_enabled'])
+    return JsonResponse({
+        'server': server.name,
+        'auto_fix_enabled': server.auto_fix_enabled,
+    })
