@@ -252,3 +252,84 @@ def _update_prometheus_targets(ip_address, has_cadvisor=False):
     # Write updated targets
     with open(targets_file, 'w') as f:
         json.dump(existing_targets, f, indent=2)
+
+
+def execute_remote_fix(ip_address, ssh_user, private_key_content, commands):
+    """
+    SSH into a server and execute fix commands.
+    Used by the alert system when user clicks "Fix" button.
+
+    Args:
+        ip_address: Target server IP
+        ssh_user: SSH username
+        private_key_content: Raw SSH private key (used once, then deleted)
+        commands: List of shell commands to execute
+
+    Returns:
+        tuple: (success: bool, logs: str)
+    """
+    logs = f"🔧 Executing fix on {ip_address}...\n"
+    logs += "=" * 50 + "\n\n"
+
+    ssh = None
+
+    try:
+        # Parse SSH key
+        logs += "🔑 Authenticating...\n"
+        key = _parse_private_key(private_key_content)
+
+        # Connect
+        ssh = paramiko.SSHClient()
+        ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        ssh.connect(hostname=ip_address, username=ssh_user, pkey=key, timeout=15)
+        logs += f"   ✅ Connected to {ip_address}\n\n"
+
+        # Execute each fix command
+        all_success = True
+        for i, cmd in enumerate(commands, 1):
+            cmd_display = cmd[:100] + "..." if len(cmd) > 100 else cmd
+            logs += f"📌 Step {i}: {cmd_display}\n"
+
+            stdin, stdout, stderr = ssh.exec_command(cmd, timeout=60)
+            exit_status = stdout.channel.recv_exit_status()
+
+            output = stdout.read().decode().strip()
+            error = stderr.read().decode().strip()
+
+            if output:
+                logs += f"   📄 Output:\n"
+                for line in output.split('\n'):
+                    logs += f"      {line}\n"
+
+            if exit_status == 0:
+                logs += f"   ✅ Success (exit code: 0)\n\n"
+            else:
+                logs += f"   ⚠️ Exit code: {exit_status}\n"
+                if error:
+                    logs += f"   Error: {error}\n"
+                logs += "\n"
+                # Don't fail on non-zero exit codes for cleanup commands
+                # (some commands intentionally return non-zero, like "kill" when no process found)
+
+        logs += "=" * 50 + "\n"
+        logs += "✅ Fix execution completed!\n"
+        return True, logs
+
+    except ValueError as e:
+        logs += f"\n❌ KEY ERROR: {str(e)}\n"
+        return False, logs
+    except paramiko.AuthenticationException:
+        logs += f"\n❌ AUTH ERROR: SSH authentication failed.\n"
+        return False, logs
+    except paramiko.ssh_exception.NoValidConnectionsError:
+        logs += f"\n❌ CONNECTION ERROR: Cannot reach {ip_address}.\n"
+        return False, logs
+    except Exception as e:
+        logs += f"\n❌ ERROR: {str(e)}\n"
+        return False, logs
+    finally:
+        if ssh:
+            try:
+                ssh.close()
+            except Exception:
+                pass
