@@ -1,4 +1,5 @@
 from django.db import models
+import json
 
 
 class Server(models.Model):
@@ -30,6 +31,10 @@ class Server(models.Model):
     is_active = models.BooleanField(default=False, help_text="True if monitoring agents are running")
     node_exporter_port = models.IntegerField(default=9100)
     cadvisor_port = models.IntegerField(default=8080)
+    auto_fix_enabled = models.BooleanField(
+        default=False,
+        help_text="If True, self-healing actions will execute automatically on critical alerts"
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -49,80 +54,33 @@ class Server(models.Model):
         }.get(self.setup_status, '❓')
 
 
-class AlertRule(models.Model):
+class Alert(models.Model):
     """
-    Defines a monitoring threshold. When a metric crosses this threshold,
-    an Alert is created with a suggested fix action.
+    Records a triggered alert from the monitoring system.
+    Created when a metric crosses its threshold.
     """
-
-    METRIC_CHOICES = [
-        ('cpu_usage', 'CPU Usage (%)'),
-        ('memory_usage', 'Memory Usage (%)'),
-        ('disk_usage', 'Disk Usage (%)'),
-        ('node_exporter_down', 'Node Exporter Down'),
-        ('cadvisor_down', 'cAdvisor Down'),
-    ]
 
     SEVERITY_CHOICES = [
         ('warning', 'Warning'),
         ('critical', 'Critical'),
     ]
 
-    name = models.CharField(max_length=150, help_text="e.g., High CPU Alert")
-    metric = models.CharField(max_length=30, choices=METRIC_CHOICES)
-    threshold = models.FloatField(
-        default=90.0,
-        help_text="Threshold value. For CPU/Memory/Disk this is percentage. For 'down' alerts, set to 0."
-    )
-    severity = models.CharField(max_length=10, choices=SEVERITY_CHOICES, default='warning')
-    is_enabled = models.BooleanField(default=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        ordering = ['metric', 'severity']
-
-    def __str__(self):
-        return f"{self.name} ({self.metric} > {self.threshold}%)"
-
-    @property
-    def severity_emoji(self):
-        return '⚠️' if self.severity == 'warning' else '🔴'
-
-
-class Alert(models.Model):
-    """
-    A triggered alert instance. Created when a metric crosses a threshold.
-    Can be fixed by executing a remote SSH command.
-    """
-
     STATUS_CHOICES = [
-        ('open', 'Open'),
-        ('fixing', 'Fix In Progress'),
-        ('fixed', 'Fixed'),
-        ('failed', 'Fix Failed'),
-        ('dismissed', 'Dismissed'),
+        ('active', 'Active'),
+        ('acknowledged', 'Acknowledged'),
+        ('resolved', 'Resolved'),
+        ('auto_fixed', 'Auto-Fixed'),
     ]
 
     server = models.ForeignKey(Server, on_delete=models.CASCADE, related_name='alerts')
-    rule = models.ForeignKey(AlertRule, on_delete=models.SET_NULL, null=True, blank=True, related_name='alerts')
+    metric_name = models.CharField(max_length=50, help_text="e.g., cpu_usage, memory_usage, disk_usage")
+    severity = models.CharField(max_length=20, choices=SEVERITY_CHOICES, default='warning')
     title = models.CharField(max_length=200)
-    description = models.TextField(blank=True, default='')
-    metric_name = models.CharField(max_length=50)
-    metric_value = models.FloatField(null=True, blank=True)
-    threshold_value = models.FloatField(null=True, blank=True)
-    severity = models.CharField(max_length=10, choices=[('warning', 'Warning'), ('critical', 'Critical')], default='warning')
-    status = models.CharField(max_length=15, choices=STATUS_CHOICES, default='open')
-    fix_command = models.TextField(
-        blank=True, default='',
-        help_text="The SSH command that will be executed to fix this issue"
-    )
-    fix_description = models.CharField(
-        max_length=200, blank=True, default='',
-        help_text="Human-readable description of what the fix does"
-    )
-    fix_logs = models.TextField(blank=True, default='', help_text="Output from executing the fix command")
+    message = models.TextField(blank=True, default='')
+    metric_value = models.FloatField(null=True, blank=True, help_text="The metric value that triggered the alert")
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='active')
     created_at = models.DateTimeField(auto_now_add=True)
-    fixed_at = models.DateTimeField(null=True, blank=True)
+    resolved_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         ordering = ['-created_at']
@@ -130,20 +88,44 @@ class Alert(models.Model):
     def __str__(self):
         return f"[{self.severity.upper()}] {self.title} on {self.server.name}"
 
-    @property
-    def severity_emoji(self):
-        return '⚠️' if self.severity == 'warning' else '🔴'
+
+class FixExecution(models.Model):
+    """
+    Records every self-healing execution attempt.
+    Linked to a server and optionally to the alert that triggered it.
+    """
+
+    STATUS_CHOICES = [
+        ('success', 'Success'),
+        ('partial', 'Partial'),
+        ('failed', 'Failed'),
+    ]
+
+    server = models.ForeignKey(Server, on_delete=models.CASCADE, related_name='fix_executions')
+    alert = models.ForeignKey(Alert, on_delete=models.SET_NULL, null=True, blank=True, related_name='fix_executions')
+    metric_name = models.CharField(max_length=50)
+    commands_run = models.TextField(
+        blank=True, default='[]',
+        help_text="JSON array of command result objects"
+    )
+    summary = models.TextField(blank=True, default='')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='failed')
+    triggered_by = models.CharField(
+        max_length=20, default='manual',
+        help_text="'manual' or 'auto'"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"Fix [{self.status}] {self.metric_name} on {self.server.name} at {self.created_at}"
 
     @property
-    def status_emoji(self):
-        return {
-            'open': '🚨',
-            'fixing': '🔧',
-            'fixed': '✅',
-            'failed': '❌',
-            'dismissed': '🔕',
-        }.get(self.status, '❓')
-
-    @property
-    def has_fix(self):
-        return bool(self.fix_command.strip())
+    def commands_run_parsed(self):
+        """Return the commands_run field as a Python list."""
+        try:
+            return json.loads(self.commands_run)
+        except (json.JSONDecodeError, TypeError):
+            return []

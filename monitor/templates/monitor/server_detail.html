@@ -6,25 +6,35 @@
 <!-- Detail Header -->
 <div class="detail-header" style="margin-bottom: 2rem;">
     <div class="server-info">
-        <h1 id="server-name">{{ server.status_emoji }} {{ server.name }}</h1>
-        <span class="server-ip-large" id="server-ip">{{ server.ip_address }}</span>
-        <span style="margin-left: 1rem;">
-            {% if server.setup_status == 'success' %}
-                <span class="badge badge-success"><span class="pulse-dot"></span> Active</span>
-            {% elif server.setup_status == 'failed' %}
-                <span class="badge badge-danger"><span class="pulse-dot"></span> Failed</span>
-            {% elif server.setup_status == 'running' %}
-                <span class="badge badge-warning"><span class="pulse-dot"></span> Running</span>
-            {% else %}
-                <span class="badge badge-warning"><span class="pulse-dot"></span> Pending</span>
-            {% endif %}
-        </span>
+        <h1 id="server-name" style="font-size: 2.2rem; background:none; -webkit-text-fill-color: var(--text-primary);">{{ server.name|upper }}</h1>
+        <div style="display: flex; align-items: center; gap: 1rem; margin-top: 0.5rem;">
+            <span class="server-ip-large" id="server-ip" style="color: var(--text-primary); font-size: 1.1rem; font-family: 'Inter', sans-serif;">{{ server.ip_address }}</span>
+            <span style="border-radius:20px; padding:2px 10px; font-size:0.8rem; font-weight:600; display:flex; align-items:center; gap:6px;
+                {% if server.setup_status == 'success' %}background:rgba(16,185,129,0.1); color:#10b981; border:1px solid rgba(16,185,129,0.2);">
+                    <span style="width:6px; height:6px; border-radius:50%; background:#10b981;"></span> Active
+                {% elif server.setup_status == 'failed' %}background:rgba(239,68,68,0.1); color:#ef4444; border:1px solid rgba(239,68,68,0.2);">
+                    <span style="width:6px; height:6px; border-radius:50%; background:#ef4444;"></span> Failed
+                {% elif server.setup_status == 'running' %}background:rgba(245,158,11,0.1); color:#f59e0b; border:1px solid rgba(245,158,11,0.2);">
+                    <span style="width:6px; height:6px; border-radius:50%; background:#f59e0b;"></span> Running
+                {% else %}background:rgba(245,158,11,0.1); color:#f59e0b; border:1px solid rgba(245,158,11,0.2);">
+                    <span style="width:6px; height:6px; border-radius:50%; background:#f59e0b;"></span> Pending
+                {% endif %}
+            </span>
+        </div>
     </div>
     <div class="detail-actions">
-        <a href="{% url 'dashboard' %}" class="btn btn-ghost" id="btn-back">← Back</a>
+        <a href="#" class="btn btn-ghost" style="color:var(--text-secondary);">← SSH</a>
+        {% if server.setup_status == 'failed' %}
+        <a href="#retry-form" class="btn btn-ghost" style="color:var(--text-secondary); background:rgba(255,255,255,0.05); border-color:transparent;">Retry Setup</a>
+        {% else %}
+        <form method="post" action="{% url 'retry_setup' server.id %}" style="display:inline;">
+            {% csrf_token %}<input type="hidden" name="ssh_private_key" value="mock_for_retrigger">
+            <button type="submit" class="btn btn-ghost" style="color:var(--text-secondary); background:rgba(255,255,255,0.05); border-color:transparent;">Refresh Status</button>
+        </form>
+        {% endif %}
         <form method="post" action="{% url 'delete_server' server.id %}" style="display: inline;" id="delete-form">
             {% csrf_token %}
-            <button type="submit" class="btn btn-danger btn-sm" id="btn-delete"
+            <button type="submit" class="btn btn-ghost" style="color:#ef4444; background:rgba(239,68,68,0.1); border-color:transparent;" id="btn-delete"
                     onclick="return confirm('Are you sure you want to remove this server?')">
                 🗑️ Delete
             </button>
@@ -32,129 +42,841 @@
     </div>
 </div>
 
-<!-- Server Info Cards -->
-<div class="stats-grid" style="grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));">
-    <div class="stat-card" id="info-user">
-        <div class="stat-label">SSH User</div>
-        <div class="stat-value" style="font-size: 1.3rem;">{{ server.ssh_user }}</div>
-    </div>
-    <div class="stat-card" id="info-agents">
-        <div class="stat-label">Monitoring Agents</div>
-        <div class="stat-value" style="font-size: 1rem;">
-            <span class="badge badge-info">node_exporter :{{ server.node_exporter_port }}</span>
-            {% if server.has_containers %}
-            <br><span class="badge badge-info" style="margin-top: 4px; display: inline-flex;">cAdvisor :{{ server.cadvisor_port }}</span>
-            {% endif %}
+{% if server.is_active and metrics and not metrics.error %}
+
+<style>
+    .solid-card {
+        background: var(--bg-card);
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-lg);
+        transition: all var(--transition-fast);
+    }
+    .kpi-block {
+        padding: 1.25rem 1.5rem;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+    }
+    .panel-header {
+        font-size: 0.75rem;
+        color: #71717a; /* zinc-500 */
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        margin-bottom: 1rem;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    .panel-header i { font-style: normal; color: var(--accent-primary); }
+</style>
+
+<div id="loading-graphs" style="text-align: center; padding: 2rem; color: var(--text-secondary);">
+    Fetching latest telemetry...
+</div>
+
+<div id="graphs-container" style="display: none;">
+    
+    <!-- Row 1: 4 KPI Widgets -->
+    <div style="display:grid; grid-template-columns: repeat(4, 1fr); gap:1.5rem; margin-bottom:1.5rem;">
+        <div class="solid-card kpi-block">
+            <div style="font-size:0.9rem; font-weight:600; margin-bottom:0.8rem;">CPU</div>
+            <div style="display:flex; justify-content:space-between; align-items:flex-end;">
+                <div style="font-size:2.5rem; font-weight:400; letter-spacing:-1px; line-height:1;">{{ metrics.cpu_usage|default:0 }}<span style="font-size:1.5rem; color:var(--text-muted);">%</span></div>
+                <div style="color:#3b82f6; font-size:1.1rem; display:flex; flex-direction:column; align-items:flex-end;">
+                    <span style="font-size:0.8rem;">Active</span><div style="font-size:0.5rem; color:var(--text-muted); font-weight:700; letter-spacing:0.5px; margin-top:2px;">NODE EXPORTER</div>
+                </div>
+            </div>
+        </div>
+        <div class="solid-card kpi-block">
+            <div style="font-size:0.9rem; font-weight:600; margin-bottom:0.8rem;">Memory</div>
+            <div style="display:flex; justify-content:space-between; align-items:flex-end;">
+                <div style="font-size:2.5rem; font-weight:400; letter-spacing:-1px; line-height:1; color:#f57c00;">{{ metrics.memory_usage|default:0 }}<span style="font-size:1.5rem; color:var(--text-muted);">%</span></div>
+                <div style="color:#10b981; font-size:1.1rem; display:flex; flex-direction:column; align-items:flex-end;">
+                    <span>{{ metrics.memory_total_gb|default:"--" }}GB</span><div style="font-size:0.5rem; color:var(--text-muted); font-weight:700; letter-spacing:0.5px; margin-top:2px;">TOTAL MEMORY</div>
+                </div>
+            </div>
+        </div>
+        <div class="solid-card kpi-block">
+            <div style="font-size:0.9rem; font-weight:600; margin-bottom:0.8rem;">Disk Usage</div>
+            <div style="display:flex; justify-content:space-between; align-items:flex-end;">
+                <div style="font-size:2.5rem; font-weight:400; letter-spacing:-1px; line-height:1;">{{ metrics.disk_usage|default:0 }}<span style="font-size:1.5rem; color:var(--text-muted);">%</span></div>
+                <div style="color:#8b5cf6; font-size:1.1rem; display:flex; flex-direction:column; align-items:flex-end;">
+                    <span style="font-size:0.9rem;">{{ metrics.uptime_str|default:"N/A" }}</span><div style="font-size:0.5rem; color:var(--text-muted); font-weight:700; letter-spacing:0.5px; margin-top:2px;">UPTIME</div>
+                </div>
+            </div>
+        </div>
+        <div class="solid-card kpi-block">
+            <div style="font-size:0.9rem; font-weight:600; margin-bottom:0.8rem;">Network I/O</div>
+            <div style="display:flex; justify-content:space-between; align-items:flex-end;">
+                <div style="font-size:2rem; font-weight:400; letter-spacing:-1px; line-height:1;">{{ metrics.network_rx_mbps|default:0 }}<span style="font-size:1rem; color:var(--text-muted);">M</span></div>
+                <div style="color:#10b981; font-size:1.1rem; display:flex; flex-direction:column; align-items:flex-end;">
+                    <span>{{ metrics.network_tx_mbps|default:0 }}M</span><div style="font-size:0.5rem; color:var(--text-muted); font-weight:700; letter-spacing:0.5px; margin-top:2px;">OUTBOUND</div>
+                </div>
+            </div>
         </div>
     </div>
-    <div class="stat-card" id="info-added">
-        <div class="stat-label">Added</div>
-        <div class="stat-value" style="font-size: 1rem; color: var(--text-secondary);">{{ server.created_at|timesince }} ago</div>
+
+    <!-- Row 2: Panels (Containers, Alerts, Insights) -->
+    <div style="display:grid; grid-template-columns: 2fr 1fr 1fr; gap:1.5rem; margin-bottom:2rem;">
+        <!-- Running Containers -->
+        <div>
+            <div class="panel-header"><i>🔷</i> RUNNING CONTAINERS</div>
+            <div class="solid-card" style="padding:0;">
+                <table style="width:100%; border-collapse:collapse; text-align:left; font-size:0.85rem;">
+                    <thead>
+                        <tr style="border-bottom:1px solid var(--border-color); color:var(--text-muted);">
+                            <th style="padding:1rem;">Containers</th>
+                            <th style="padding:1rem;">CPU</th>
+                            <th style="padding:1rem;">Memory</th>
+                            <th style="padding:1rem;">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% if server.has_containers %}
+                            {% for c in metrics.containers %}
+                            <tr style="border-bottom:1px solid rgba(255,255,255,0.02);">
+                                <td style="padding:1rem;">{{ c.name }}</td><td style="padding:1rem;">{{ c.cpu }}</td><td style="padding:1rem;">{{ c.mem }}</td>
+                                <td style="padding:1rem; color:#10b981;">{{ c.status }}</td>
+                            </tr>
+                            {% empty %}
+                            <tr><td colspan="4" style="padding:2rem; text-align:center; color:var(--text-muted);">No containers currently detected by cAdvisor.</td></tr>
+                            {% endfor %}
+                        {% else %}
+                        <tr><td colspan="4" style="padding:2rem; text-align:center; color:var(--text-muted);">Docker monitoring (cAdvisor) is disabled for this server.</td></tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <!-- Alerts -->
+        <div>
+            <div class="panel-header"><i>🚨</i> ALERTS</div>
+            <div class="solid-card" style="padding:1.5rem; min-height:150px; display:flex; flex-direction:column; gap:1rem;">
+                {% for alert in metrics.alerts %}
+                <div style="display:flex; flex-direction:column; gap:4px; padding-bottom:1rem; border-bottom:1px solid rgba(255,255,255,0.05);">
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <span style="color:#ef4444; font-weight:600; font-size:0.9rem;">{{ alert.title }}</span>
+                        <span style="background:rgba(239,68,68,0.1); color:#ef4444; font-size:0.65rem; padding:2px 6px; border-radius:4px;">{{ server.name }}</span>
+                    </div>
+                    <span style="color:var(--text-muted); font-size:0.8rem;">{{ alert.message }}</span>
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-top:6px;">
+                        <span style="color:var(--text-muted); font-size:0.75rem;">{{ alert.time }}</span>
+                        <button onclick="openFixModal('{{ alert.metric_name }}', '{{ alert.title|escapejs }}')"
+                                style="background:rgba(16,185,129,0.15); color:#10b981; border:1px solid rgba(16,185,129,0.3);
+                                       padding:4px 12px; border-radius:6px; font-size:0.7rem; font-weight:700;
+                                       cursor:pointer; letter-spacing:0.5px; transition: all 0.2s;"
+                                onmouseover="this.style.background='rgba(16,185,129,0.3)'"
+                                onmouseout="this.style.background='rgba(16,185,129,0.15)'"
+                                id="fix-btn-{{ forloop.counter }}">
+                            🔧 FIX NOW
+                        </button>
+                    </div>
+                </div>
+                {% empty %}
+                <div style="color:var(--text-muted); font-size:0.85rem; text-align:center; margin:auto;">No active incident alerts. System operating normally.</div>
+                {% endfor %}
+            </div>
+        </div>
+        <!-- Insights -->
+        <div>
+            <div class="panel-header"><i>💡</i> INSIGHTS</div>
+            <div class="solid-card" style="padding:1.5rem; min-height:150px; font-size:0.85rem; color:var(--text-secondary); line-height:1.6;">
+                {% if metrics.cpu_usage and metrics.cpu_usage < 10 and metrics.memory_usage and metrics.memory_usage < 30 %}
+                <p>Host is heavily underutilized. CPU usage is averaging below 10%.</p>
+                {% elif metrics.cpu_usage and metrics.cpu_usage > 85 %}
+                <p>Sustained CPU spikes observed over the past 5 minutes. Consider scaling resources.</p>
+                {% elif metrics.disk_usage and metrics.disk_usage > 80 %}
+                <p>Disk space is filling up. Preemptive action recommended before capacity limits are hit.</p>
+                {% else %}
+                <p>No actionable insights detected. Performance parameters are within standard baselines.</p>
+                {% endif %}
+            </div>
+        </div>
     </div>
-    <div class="stat-card" id="info-updated">
-        <div class="stat-label">Last Updated</div>
-        <div class="stat-value" style="font-size: 1rem; color: var(--text-secondary);">{{ server.updated_at|timesince }} ago</div>
+
+    <!-- Row 2.5: Self-Healing Control Panel -->
+    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1.5rem; margin-bottom:2rem;">
+        <!-- Auto-Fix Toggle -->
+        <div>
+            <div class="panel-header"><i>⚡</i> SELF-HEALING</div>
+            <div class="solid-card" style="padding:1.5rem;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+                    <div>
+                        <div style="font-weight:600; font-size:0.95rem; color:var(--text-primary);">Auto-Fix Mode</div>
+                        <div style="font-size:0.75rem; color:var(--text-muted); margin-top:4px;">Automatically execute safe remediation when critical alerts trigger</div>
+                    </div>
+                    <label style="position:relative; display:inline-block; width:48px; height:26px; cursor:pointer;">
+                        <input type="checkbox" id="autofix-toggle" {% if server.auto_fix_enabled %}checked{% endif %}
+                               onchange="toggleAutoFix()"
+                               style="opacity:0; width:0; height:0;">
+                        <span style="position:absolute; cursor:pointer; top:0; left:0; right:0; bottom:0;
+                                     background:{% if server.auto_fix_enabled %}#10b981{% else %}rgba(255,255,255,0.1){% endif %};
+                                     transition:0.3s; border-radius:26px;"
+                              id="autofix-slider">
+                            <span style="position:absolute; height:20px; width:20px; left:{% if server.auto_fix_enabled %}25px{% else %}3px{% endif %};
+                                         bottom:3px; background:white; transition:0.3s; border-radius:50%;"
+                                  id="autofix-knob"></span>
+                        </span>
+                    </label>
+                </div>
+                <div style="font-size:0.75rem; padding:8px 12px; border-radius:8px;
+                            background:{% if server.auto_fix_enabled %}rgba(16,185,129,0.08){% else %}rgba(255,255,255,0.03){% endif %};
+                            color:{% if server.auto_fix_enabled %}#10b981{% else %}var(--text-muted){% endif %};"
+                     id="autofix-status-text">
+                    {% if server.auto_fix_enabled %}
+                    ✅ Auto-fix is <strong>ENABLED</strong>. Critical alerts will trigger remediation automatically.
+                    {% else %}
+                    ⏸️ Auto-fix is <strong>DISABLED</strong>. Use manual "Fix Now" buttons on alerts.
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        <!-- Fix History -->
+        <div>
+            <div class="panel-header"><i>📋</i> FIX HISTORY</div>
+            <div class="solid-card" style="padding:0; max-height:200px; overflow-y:auto;" id="fix-history-panel">
+                <div style="padding:2rem; text-align:center; color:var(--text-muted); font-size:0.85rem;" id="fix-history-loading">
+                    Loading execution history...
+                </div>
+            </div>
+        </div>
     </div>
+
+    <!-- Fix Modal (hidden by default) -->
+    <div id="fix-modal-overlay" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0;
+                                        background:rgba(0,0,0,0.7); z-index:9999; backdrop-filter:blur(4px);
+                                        justify-content:center; align-items:center;">
+        <div style="background:var(--bg-card); border:1px solid var(--border-color); border-radius:16px;
+                    max-width:600px; width:90%; max-height:80vh; overflow-y:auto; padding:2rem;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.5rem;">
+                <h3 style="font-size:1.2rem; font-weight:700; color:var(--text-primary);" id="fix-modal-title">🔧 Self-Healing Actions</h3>
+                <button onclick="closeFixModal()" style="background:none; border:none; color:var(--text-muted);
+                        font-size:1.5rem; cursor:pointer; line-height:1;">×</button>
+            </div>
+            <div id="fix-modal-metric" style="font-size:0.8rem; color:var(--text-muted); margin-bottom:1rem;"></div>
+
+            <!-- Command Preview List -->
+            <div id="fix-modal-commands" style="display:flex; flex-direction:column; gap:0.8rem; margin-bottom:1.5rem;"></div>
+
+            <!-- SSH Key Input -->
+            <div style="margin-bottom:1.5rem;">
+                <label style="font-size:0.8rem; color:var(--text-muted); font-weight:600; display:block; margin-bottom:8px;">SSH PRIVATE KEY (used once, not stored)</label>
+                <textarea id="fix-ssh-key" rows="4" placeholder="-----BEGIN RSA PRIVATE KEY-----"
+                          style="width:100%; background:rgba(255,255,255,0.03); border:1px solid var(--border-color);
+                                 border-radius:8px; padding:12px; color:var(--text-primary); font-family:'JetBrains Mono', monospace;
+                                 font-size:0.75rem; resize:vertical;"></textarea>
+            </div>
+
+            <!-- Action Buttons -->
+            <div style="display:flex; gap:1rem; justify-content:flex-end;">
+                <button onclick="closeFixModal()" style="padding:10px 20px; border-radius:8px; border:1px solid var(--border-color);
+                        background:transparent; color:var(--text-secondary); cursor:pointer; font-size:0.85rem;">Cancel</button>
+                <button onclick="executeFixFromModal()" id="fix-execute-btn"
+                        style="padding:10px 24px; border-radius:8px; border:none; background:#10b981; color:#fff;
+                               cursor:pointer; font-size:0.85rem; font-weight:700; letter-spacing:0.5px;
+                               transition:all 0.2s;"
+                        onmouseover="this.style.background='#059669'"
+                        onmouseout="this.style.background='#10b981'">
+                    ⚡ Execute Fix
+                </button>
+            </div>
+
+            <!-- Execution Results (shown after run) -->
+            <div id="fix-results" style="display:none; margin-top:1.5rem; border-top:1px solid var(--border-color); padding-top:1.5rem;">
+                <h4 style="font-size:0.9rem; font-weight:700; color:var(--text-primary); margin-bottom:1rem;">Execution Results</h4>
+                <div id="fix-results-content"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Row 3: CATEGORICAL GRAPH VISUALIZATIONS -->
+    <style>
+        .accordion-btn {
+            width: 100%; text-align: left; background: var(--bg-card); 
+            border: 1px solid var(--border-color); padding: 1rem 1.5rem;
+            font-size: 1rem; font-weight: 600; color: var(--text-primary);
+            cursor: pointer; display: flex; justify-content: space-between;
+            border-radius: var(--radius-lg); margin-bottom: 0.5rem;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            align-items: center;
+        }
+        .accordion-btn:hover { background: #161619; border-color: rgba(255,255,255,0.15); }
+        .accordion-content {
+            display: none; padding: 1.5rem; border: 1px solid var(--border-color);
+            border-top: none; background: transparent; border-bottom-left-radius: var(--radius-lg);
+            border-bottom-right-radius: var(--radius-lg); margin-bottom: 1.5rem;
+            margin-top: -0.6rem; position: relative; z-index: 0;
+            animation: slideDown 0.3s ease-out;
+        }
+        @keyframes slideDown {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .accordion-btn.active {
+            border-bottom-left-radius: 0; border-bottom-right-radius: 0;
+            border-bottom-color: transparent; background: #161619;
+            z-index: 1; position: relative;
+        }
+        .accordion-content.active { display: block; }
+        .graph-grid-acc { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+        @media (max-width: 1024px) { .graph-grid-acc { grid-template-columns: 1fr; } }
+        .acc-toggle-icon { transition: transform 0.3s; font-size: 1.2rem; font-weight: 300; }
+        .accordion-btn.active .acc-toggle-icon { transform: rotate(45deg); color: var(--accent-primary); }
+    </style>
+
+    <div class="panel-header" style="margin-top:2rem;"><i>📈</i> CATEGORIZED VISUALIZATIONS</div>
+
+    <!-- PERFORMANCE CATEGORY -->
+    <button class="accordion-btn" onclick="toggleAcc('acc-perf', this)">
+        <div style="display:flex; align-items:center; gap:12px;">
+            <span style="font-size:1.2rem;">⚡</span> System Performance
+        </div>
+        <span class="acc-toggle-icon">+</span>
+    </button>
+    <div id="acc-perf" class="accordion-content">
+        <div class="graph-grid-acc">
+            <div class="solid-card" style="padding:1.5rem;">
+                <h4 style="margin-bottom:1rem;color:var(--text-muted);font-size:0.8rem;text-transform:uppercase;letter-spacing:1px;">CPU Usage (%)</h4>
+                <div style="height:220px; width:100%;"><canvas id="chart-cpu"></canvas></div>
+            </div>
+            <div class="solid-card" style="padding:1.5rem;">
+                <h4 style="margin-bottom:1rem;color:var(--text-muted);font-size:0.8rem;text-transform:uppercase;letter-spacing:1px;">System Load Averages</h4>
+                <div style="height:220px; width:100%;"><canvas id="chart-load"></canvas></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MEMORY CATEGORY -->
+    <button class="accordion-btn" onclick="toggleAcc('acc-mem', this)">
+        <div style="display:flex; align-items:center; gap:12px;">
+            <span style="font-size:1.2rem;">🧠</span> Memory Utilization
+        </div>
+        <span class="acc-toggle-icon">+</span>
+    </button>
+    <div id="acc-mem" class="accordion-content">
+        <div class="graph-grid-acc">
+            <div class="solid-card" style="padding:1.5rem;">
+                <h4 style="margin-bottom:1rem;color:var(--text-muted);font-size:0.8rem;text-transform:uppercase;letter-spacing:1px;">Memory Allocation History</h4>
+                <div style="height:220px; width:100%;"><canvas id="chart-memory"></canvas></div>
+            </div>
+            <div class="solid-card" style="padding:1.5rem; display:flex; flex-direction:column;">
+                <h4 style="margin-bottom:1rem;color:var(--text-muted);font-size:0.8rem;text-transform:uppercase;letter-spacing:1px;">Current Distribution</h4>
+                <div style="flex:1; display:flex; justify-content:center; align-items:center; position:relative; min-height:180px;">
+                    <div style="position:relative; width:160px; height:160px;">
+                        <canvas id="chart-memory-doughnut"></canvas>
+                        <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center;">
+                            <div style="font-size: 1.5rem; font-weight: bold; color: var(--accent-primary);">{{ metrics.memory_usage|default:0 }}%</div>
+                            <div style="font-size: 0.6rem; color: var(--text-muted); letter-spacing: 1px; margin-top:2px;">USED</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- STORAGE CATEGORY -->
+    <button class="accordion-btn" onclick="toggleAcc('acc-disk', this)">
+        <div style="display:flex; align-items:center; gap:12px;">
+            <span style="font-size:1.2rem;">💾</span> Storage & Disk I/O
+        </div>
+        <span class="acc-toggle-icon">+</span>
+    </button>
+    <div id="acc-disk" class="accordion-content">
+        <div class="graph-grid-acc" style="grid-template-columns: 1fr 1fr 1fr;">
+            <div class="solid-card" style="padding:1.5rem;">
+                <h4 style="margin-bottom:1rem;color:var(--text-muted);font-size:0.8rem;text-transform:uppercase;letter-spacing:1px;">Disk I/O Aggregated</h4>
+                <div style="height:220px; width:100%;"><canvas id="chart-disk"></canvas></div>
+            </div>
+            <div class="solid-card" style="padding:1.5rem;">
+                <h4 style="margin-bottom:1rem;color:var(--text-muted);font-size:0.8rem;text-transform:uppercase;letter-spacing:1px;">Disk IOPS</h4>
+                <div style="height:220px; width:100%;"><canvas id="chart-iops"></canvas></div>
+            </div>
+            <div class="solid-card" style="padding:1.5rem; display:flex; flex-direction:column;">
+                <h4 style="margin-bottom:1rem;color:var(--text-muted);font-size:0.8rem;text-transform:uppercase;letter-spacing:1px;">Disk Usage</h4>
+                <div style="flex:1; display:flex; justify-content:center; align-items:center; position:relative; min-height:180px;">
+                    <div style="position:relative; width:160px; height:160px;">
+                        <canvas id="chart-disk-doughnut"></canvas>
+                        <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center;">
+                            <div style="font-size: 1.5rem; font-weight: bold; color: var(--text-primary);">{{ metrics.disk_usage|default:0 }}%</div>
+                            <div style="font-size: 0.6rem; color: var(--text-muted); letter-spacing: 1px; margin-top:2px;">USED</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- NETWORK CATEGORY -->
+    <button class="accordion-btn" onclick="toggleAcc('acc-net', this)">
+        <div style="display:flex; align-items:center; gap:12px;">
+            <span style="font-size:1.2rem;">🌐</span> Network Activity
+        </div>
+        <span class="acc-toggle-icon">+</span>
+    </button>
+    <div id="acc-net" class="accordion-content">
+        <div class="graph-grid-acc">
+            <div class="solid-card" style="padding:1.5rem;">
+                <h4 style="margin-bottom:1rem;color:var(--text-muted);font-size:0.8rem;text-transform:uppercase;letter-spacing:1px;">Network Bandwidth</h4>
+                <div style="height:220px; width:100%;"><canvas id="chart-network"></canvas></div>
+            </div>
+            <div class="solid-card" style="padding:1.5rem;">
+                <h4 style="margin-bottom:1rem;color:var(--text-muted);font-size:0.8rem;text-transform:uppercase;letter-spacing:1px;">Active TCP Connections</h4>
+                <div style="height:220px; width:100%;"><canvas id="chart-tcp"></canvas></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function toggleAcc(id, btnElement) {
+            // Close all other accordions to keep UI extremely clean (optional, but matching "clean UI" request)
+            document.querySelectorAll('.accordion-content').forEach(el => {
+                if (el.id !== id) el.classList.remove('active');
+            });
+            document.querySelectorAll('.accordion-btn').forEach(btn => {
+                if (btn !== btnElement) btn.classList.remove('active');
+            });
+
+            // Toggle target
+            const content = document.getElementById(id);
+            if (content.classList.contains('active')) {
+                content.classList.remove('active');
+                btnElement.classList.remove('active');
+            } else {
+                content.classList.add('active');
+                btnElement.classList.add('active');
+                // Force Chart.js to recompute canvas dimensions since it was hidden
+                setTimeout(() => window.dispatchEvent(new Event('resize')), 10);
+            }
+        }
+    </script>
+
 </div>
 
-<!-- Live Metrics (from Prometheus) -->
-{% if server.is_active and metrics and not metrics.error %}
-<div class="section-title">📊 Live Metrics</div>
-<div class="metrics-grid">
-    {% if metrics.cpu_usage is not None %}
-    <div class="metric-card {% if metrics.cpu_usage > 90 %}critical{% elif metrics.cpu_usage > 70 %}warn{% else %}good{% endif %}" id="metric-cpu">
-        <div class="metric-icon">💻</div>
-        <div class="metric-label">CPU Usage</div>
-        <div class="metric-value">{{ metrics.cpu_usage }}<span class="metric-unit">%</span></div>
-    </div>
-    {% endif %}
-
-    {% if metrics.memory_usage is not None %}
-    <div class="metric-card {% if metrics.memory_usage > 90 %}critical{% elif metrics.memory_usage > 75 %}warn{% else %}good{% endif %}" id="metric-memory">
-        <div class="metric-icon">🧠</div>
-        <div class="metric-label">Memory Usage</div>
-        <div class="metric-value">{{ metrics.memory_usage }}<span class="metric-unit">%</span></div>
-        {% if metrics.memory_total_gb %}
-        <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 4px;">of {{ metrics.memory_total_gb }} GB</div>
-        {% endif %}
-    </div>
-    {% endif %}
-
-    {% if metrics.disk_usage is not None %}
-    <div class="metric-card {% if metrics.disk_usage > 90 %}critical{% elif metrics.disk_usage > 80 %}warn{% else %}good{% endif %}" id="metric-disk">
-        <div class="metric-icon">💾</div>
-        <div class="metric-label">Disk Usage</div>
-        <div class="metric-value">{{ metrics.disk_usage }}<span class="metric-unit">%</span></div>
-    </div>
-    {% endif %}
-
-    {% if metrics.uptime_hours is not None %}
-    <div class="metric-card good" id="metric-uptime">
-        <div class="metric-icon">⏱️</div>
-        <div class="metric-label">Uptime</div>
-        <div class="metric-value">{{ metrics.uptime_hours }}<span class="metric-unit">hrs</span></div>
-    </div>
-    {% endif %}
-
-    {% if metrics.network_rx_mbps is not None %}
-    <div class="metric-card" id="metric-network">
-        <div class="metric-icon">🌐</div>
-        <div class="metric-label">Network RX</div>
-        <div class="metric-value">{{ metrics.network_rx_mbps }}<span class="metric-unit">MB/s</span></div>
-    </div>
-    {% endif %}
-</div>
 {% elif server.is_active %}
-<div class="glass-card" style="text-align: center; padding: 2rem;">
-    <div style="font-size: 2rem; margin-bottom: 0.5rem;">📡</div>
-    <h3 style="color: var(--text-secondary); font-size: 1rem;">Waiting for Metrics</h3>
-    <p style="color: var(--text-muted); font-size: 0.875rem;">
+<div class="solid-card" style="text-align: center; padding: 4rem 2rem;">
+    <div style="font-size: 2rem; margin-bottom: 1rem;">📡</div>
+    <h3 style="color: var(--text-secondary); font-size: 1.2rem;">Awaiting Telemetry Sync</h3>
+    <p style="color: var(--text-muted); font-size: 0.9rem; margin-top:0.5rem;">
         {% if metrics.error %}
             {{ metrics.error }}<br>
         {% endif %}
-        Make sure Prometheus is running: <code style="background: rgba(0,0,0,0.3); padding: 2px 8px; border-radius: 4px;">docker-compose up -d</code> in the <code>prometheus/</code> directory.
+        Prometheus has not yet scraped historical endpoints.
     </p>
 </div>
 {% endif %}
 
 <!-- Retry Setup (for failed servers) -->
 {% if server.setup_status == 'failed' %}
-<div class="glass-card" style="border-color: rgba(239, 68, 68, 0.2);">
-    <h2>🔄 Retry Setup</h2>
-    <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 1rem;">
-        The setup failed. You can retry by providing your SSH key again.
+<div class="solid-card" style="border-color: rgba(239, 68, 68, 0.2); max-width:600px; margin-top:2rem;">
+    <h2 style="font-size:1.2rem; color:var(--text-primary); margin-bottom:0.5rem;">🔄 Retry Setup</h2>
+    <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 1.5rem;">
+        The setup sequence failed. You can retry provisioning by providing your SSH key again.
     </p>
     <form method="post" action="{% url 'retry_setup' server.id %}" id="retry-form">
         {% csrf_token %}
         <div class="form-group">
-            <label for="retry_key">SSH Private Key</label>
-            <textarea class="form-input" name="ssh_private_key" id="retry_key" rows="6"
-                      placeholder="-----BEGIN RSA PRIVATE KEY-----&#10;Paste your key here...&#10;-----END RSA PRIVATE KEY-----" required></textarea>
-            <div class="help-text">🔒 Used once for retry, then immediately deleted.</div>
+            <textarea class="form-input" name="ssh_private_key" id="retry_key" rows="4"
+                      placeholder="-----BEGIN RSA PRIVATE KEY-----" required></textarea>
         </div>
         <button type="submit" class="btn btn-primary" id="btn-retry">
-            🔄 Retry Setup
+            Execute Retry
         </button>
     </form>
-</div>
-{% endif %}
-
-<!-- Setup Logs -->
-{% if server.setup_logs %}
-<div class="section-title">📋 Setup Logs</div>
-<div class="glass-card">
-    <div class="log-viewer" id="setup-logs">{{ server.setup_logs }}</div>
 </div>
 {% endif %}
 {% endblock %}
 
 {% block extra_js %}
-{% if server.is_active %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
-    // Auto-refresh metrics every 30 seconds
-    setTimeout(function() {
-        location.reload();
-    }, 30000);
+    document.addEventListener("DOMContentLoaded", function() {
+        {% if server.is_active and metrics and not metrics.error %}
+        Chart.defaults.color = "#71717a";
+        Chart.defaults.font.family = "'JetBrains Mono', monospace";
+        
+        // Common line gradient
+        function getGradient() {
+            const ctx = document.createElement('canvas').getContext('2d');
+            const grad = ctx.createLinearGradient(0, 0, 0, 300);
+            grad.addColorStop(0, 'rgba(255, 152, 0, 0.4)');
+            grad.addColorStop(1, 'rgba(255, 152, 0, 0.0)');
+            return grad;
+        }
+
+        // Fetch the REAL timeseries data
+        fetch(`/server/{{ server.id }}/api/timeseries/`)
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('loading-graphs').style.display = 'none';
+                document.getElementById('graphs-container').style.display = 'block';
+
+                function extract(arr) {
+                    if (!arr) return { labels: [], values: [] };
+                    return {
+                        labels: arr.map(pt => {
+                            const d = new Date(pt[0] * 1000);
+                            return d.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                        }),
+                        values: arr.map(pt => pt[1])
+                    };
+                }
+
+                const cpu = extract(data.cpu);
+                const mem = extract(data.memory);
+                const rx = extract(data.network_rx);
+                const tx = extract(data.network_tx);
+                const disk = extract(data.disk_io);
+                const load1 = extract(data.load1);
+                const load5 = extract(data.load5);
+                const load15 = extract(data.load15);
+                const iops = extract(data.disk_iops);
+                const tcp = extract(data.tcp_conns);
+
+                const commonOptions = {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        x: { grid: { display: false } },
+                        y: { grid: { color: 'rgba(255,255,255,0.05)' }, beginAtZero: true }
+                    }
+                };
+
+                // CPU
+                new Chart(document.getElementById('chart-cpu').getContext('2d'), {
+                    type: 'line',
+                    data: {
+                        labels: cpu.labels,
+                        datasets: [{
+                            data: cpu.values, borderColor: '#ff9800', backgroundColor: getGradient(),
+                            borderWidth: 2, tension: 0.4, fill: true, pointRadius: 0
+                        }]
+                    },
+                    options: commonOptions
+                });
+
+                // Memory
+                new Chart(document.getElementById('chart-memory').getContext('2d'), {
+                    type: 'line',
+                    data: {
+                        labels: mem.labels,
+                        datasets: [{
+                            data: mem.values, borderColor: '#d97706', backgroundColor: getGradient(),
+                            borderWidth: 2, tension: 0.4, fill: true, pointRadius: 0
+                        }]
+                    },
+                    options: commonOptions
+                });
+
+                // Memory Doughnut
+                const curMem = {{ metrics.memory_usage|default:0 }};
+                new Chart(document.getElementById('chart-memory-doughnut').getContext('2d'), {
+                    type: 'doughnut',
+                    data: {
+                        labels: ['Used', 'Free'],
+                        datasets: [{
+                            data: [curMem, 100 - curMem],
+                            backgroundColor: ['#ff9800', 'rgba(255,255,255,0.05)'],
+                            borderWidth: 0, cutout: '85%'
+                        }]
+                    },
+                    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { enabled: false } } }
+                });
+
+                // Disk Doughnut
+                const curDisk = {{ metrics.disk_usage|default:0 }};
+                new Chart(document.getElementById('chart-disk-doughnut').getContext('2d'), {
+                    type: 'doughnut',
+                    data: {
+                        labels: ['Used', 'Free'],
+                        datasets: [{
+                            data: [curDisk, 100 - curDisk],
+                            backgroundColor: ['#eaeaea', 'rgba(255,255,255,0.05)'],
+                            borderWidth: 0, cutout: '85%'
+                        }]
+                    },
+                    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { enabled: false } } }
+                });
+
+                // Network RX/TX
+                new Chart(document.getElementById('chart-network').getContext('2d'), {
+                    type: 'line',
+                    data: {
+                        labels: rx.labels.length ? rx.labels : tx.labels,
+                        datasets: [
+                            { label: 'RX MB/s', data: rx.values, borderColor: '#ff9800', borderWidth: 2, tension: 0.4, pointRadius: 0 },
+                            { label: 'TX MB/s', data: tx.values, borderColor: '#3b82f6', borderWidth: 2, tension: 0.4, pointRadius: 0 }
+                        ]
+                    },
+                    options: {
+                        ...commonOptions,
+                        plugins: { legend: { display: true, labels: { color: '#a1a1aa' } } }
+                    }
+                });
+
+                // Disk IO
+                new Chart(document.getElementById('chart-disk').getContext('2d'), {
+                    type: 'bar',
+                    data: {
+                        labels: disk.labels,
+                        datasets: [{
+                            data: disk.values, backgroundColor: '#ff9800', borderRadius: 2
+                        }]
+                    },
+                    options: commonOptions
+                });
+
+                // Load Averages
+                new Chart(document.getElementById('chart-load').getContext('2d'), {
+                    type: 'line',
+                    data: {
+                        labels: load1.labels.length ? load1.labels : load5.labels,
+                        datasets: [
+                            { label: '1m', data: load1.values, borderColor: '#ff9800', borderWidth: 2, tension: 0.4, pointRadius: 0 },
+                            { label: '5m', data: load5.values, borderColor: '#fcd34d', borderWidth: 2, tension: 0.4, pointRadius: 0 },
+                            { label: '15m', data: load15.values, borderColor: '#f87171', borderWidth: 2, tension: 0.4, pointRadius: 0 }
+                        ]
+                    },
+                    options: {
+                        ...commonOptions,
+                        plugins: { legend: { display: true, labels: { color: '#a1a1aa' } } },
+                        scales: { x: { grid: { display: false } }, y: { grid: { color: 'rgba(255,255,255,0.05)' } } } // no beginAtZero required for load
+                    }
+                });
+                
+                // IOPS
+                new Chart(document.getElementById('chart-iops').getContext('2d'), {
+                    type: 'line',
+                    data: {
+                        labels: iops.labels,
+                        datasets: [{
+                            label: 'IOPS', data: iops.values, borderColor: '#d97706', backgroundColor: getGradient(),
+                            borderWidth: 2, tension: 0.4, fill: true, pointRadius: 0
+                        }]
+                    },
+                    options: commonOptions
+                });
+
+                // TCP Connections
+                new Chart(document.getElementById('chart-tcp').getContext('2d'), {
+                    type: 'line',
+                    data: {
+                        labels: tcp.labels,
+                        datasets: [{
+                            label: 'TCP Connections', data: tcp.values, borderColor: '#3b82f6', backgroundColor: getGradient(),
+                            borderWidth: 2, tension: 0.4, fill: true, pointRadius: 0
+                        }]
+                    },
+                    options: commonOptions
+                });
+            })
+            .catch(err => {
+                document.getElementById('loading-graphs').innerHTML = `❌ Failed to load graph data: ${err}`;
+            });
+
+        {% endif %}
+    });
 </script>
-{% endif %}
+
+<!-- Self-Healing JavaScript -->
+<script>
+    const SERVER_ID = {{ server.id }};
+    let currentMetricName = '';
+    const csrfToken = '{{ csrf_token }}';
+
+    // ─── FIX MODAL ───────────────────────────────────────────────
+    function openFixModal(metricName, alertTitle) {
+        currentMetricName = metricName;
+        document.getElementById('fix-modal-title').textContent = '🔧 Fix: ' + alertTitle;
+        document.getElementById('fix-modal-metric').textContent = 'Metric: ' + metricName;
+        document.getElementById('fix-results').style.display = 'none';
+        document.getElementById('fix-execute-btn').disabled = false;
+        document.getElementById('fix-execute-btn').textContent = '⚡ Execute Fix';
+
+        // Fetch command preview
+        const commandsDiv = document.getElementById('fix-modal-commands');
+        commandsDiv.innerHTML = '<div style="color:var(--text-muted); font-size:0.85rem;">Loading commands...</div>';
+
+        fetch(`/server/${SERVER_ID}/api/fix/${metricName}/preview/`)
+            .then(r => r.json())
+            .then(data => {
+                if (!data.actions || data.actions.length === 0) {
+                    commandsDiv.innerHTML = '<div style="color:var(--text-muted);">No fix actions available for this metric.</div>';
+                    return;
+                }
+                commandsDiv.innerHTML = data.actions.map((action, i) => `
+                    <div style="background:rgba(255,255,255,0.02); border:1px solid var(--border-color);
+                                border-radius:8px; padding:12px;">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                            <span style="font-weight:600; font-size:0.85rem; color:var(--text-primary);">${action.label}</span>
+                            <span style="font-size:0.65rem; padding:2px 8px; border-radius:4px;
+                                         background:${action.severity === 'safe' ? 'rgba(16,185,129,0.1)' : 'rgba(245,158,11,0.1)'};
+                                         color:${action.severity === 'safe' ? '#10b981' : '#f59e0b'};">
+                                ${action.severity.toUpperCase()}
+                            </span>
+                        </div>
+                        <div style="font-size:0.75rem; color:var(--text-muted); margin-bottom:6px;">${action.description}</div>
+                        <code style="font-size:0.7rem; color:#a78bfa; background:rgba(167,139,250,0.08);
+                                     padding:4px 8px; border-radius:4px; display:block; word-break:break-all;">
+                            ${action.command}
+                        </code>
+                    </div>
+                `).join('');
+            })
+            .catch(() => {
+                commandsDiv.innerHTML = '<div style="color:#ef4444;">Failed to load fix actions.</div>';
+            });
+
+        // Show modal
+        const overlay = document.getElementById('fix-modal-overlay');
+        overlay.style.display = 'flex';
+    }
+
+    function closeFixModal() {
+        document.getElementById('fix-modal-overlay').style.display = 'none';
+    }
+
+    // Close on click outside
+    document.getElementById('fix-modal-overlay').addEventListener('click', function(e) {
+        if (e.target === this) closeFixModal();
+    });
+
+    function executeFixFromModal() {
+        const sshKey = document.getElementById('fix-ssh-key').value.trim();
+        if (!sshKey) {
+            alert('Please provide your SSH private key to proceed.');
+            return;
+        }
+
+        const btn = document.getElementById('fix-execute-btn');
+        btn.disabled = true;
+        btn.textContent = '⏳ Executing...';
+
+        const formData = new FormData();
+        formData.append('ssh_private_key', sshKey);
+        formData.append('csrfmiddlewaretoken', csrfToken);
+
+        fetch(`/server/${SERVER_ID}/api/fix/${currentMetricName}/execute/`, {
+            method: 'POST',
+            body: formData,
+        })
+        .then(r => r.json())
+        .then(data => {
+            btn.textContent = data.overall_status === 'success' ? '✅ Complete' : '⚠️ Finished';
+
+            const resultsDiv = document.getElementById('fix-results');
+            const contentDiv = document.getElementById('fix-results-content');
+            resultsDiv.style.display = 'block';
+
+            // Overall status banner
+            const statusColor = data.overall_status === 'success' ? '#10b981' :
+                                data.overall_status === 'partial' ? '#f59e0b' : '#ef4444';
+            let html = `<div style="background:${statusColor}15; border:1px solid ${statusColor}30;
+                                    border-radius:8px; padding:10px 14px; margin-bottom:1rem;
+                                    color:${statusColor}; font-size:0.85rem; font-weight:600;">
+                            ${data.overall_status.toUpperCase()}: ${data.summary}
+                         </div>`;
+
+            // Individual command results
+            if (data.results) {
+                data.results.forEach(r => {
+                    const icon = r.status === 'success' ? '✅' : '❌';
+                    html += `<div style="border:1px solid var(--border-color); border-radius:8px;
+                                        padding:12px; margin-bottom:8px;">
+                        <div style="font-weight:600; font-size:0.85rem; color:var(--text-primary); margin-bottom:4px;">
+                            ${icon} ${r.label}
+                        </div>
+                        ${r.output ? `<pre style="font-size:0.7rem; color:var(--text-muted); background:rgba(0,0,0,0.3);
+                                              padding:8px; border-radius:4px; overflow-x:auto; margin:6px 0;
+                                              max-height:120px; white-space:pre-wrap;">${r.output}</pre>` : ''}
+                        ${r.error ? `<div style="font-size:0.7rem; color:#ef4444; margin-top:4px;">Error: ${r.error}</div>` : ''}
+                        ${r.retries > 0 ? `<div style="font-size:0.65rem; color:var(--text-muted);">Retries: ${r.retries}</div>` : ''}
+                    </div>`;
+                });
+            }
+            contentDiv.innerHTML = html;
+
+            // Refresh history
+            loadFixHistory();
+        })
+        .catch(err => {
+            btn.textContent = '❌ Error';
+            document.getElementById('fix-results').style.display = 'block';
+            document.getElementById('fix-results-content').innerHTML =
+                `<div style="color:#ef4444; font-size:0.85rem;">Execution failed: ${err}</div>`;
+        });
+    }
+
+    // ─── AUTO-FIX TOGGLE ─────────────────────────────────────────
+    function toggleAutoFix() {
+        const formData = new FormData();
+        formData.append('csrfmiddlewaretoken', csrfToken);
+
+        fetch(`/server/${SERVER_ID}/api/autofix/toggle/`, {
+            method: 'POST',
+            body: formData,
+        })
+        .then(r => r.json())
+        .then(data => {
+            const slider = document.getElementById('autofix-slider');
+            const knob = document.getElementById('autofix-knob');
+            const statusText = document.getElementById('autofix-status-text');
+
+            if (data.auto_fix_enabled) {
+                slider.style.background = '#10b981';
+                knob.style.left = '25px';
+                statusText.style.background = 'rgba(16,185,129,0.08)';
+                statusText.style.color = '#10b981';
+                statusText.innerHTML = '✅ Auto-fix is <strong>ENABLED</strong>. Critical alerts will trigger remediation automatically.';
+            } else {
+                slider.style.background = 'rgba(255,255,255,0.1)';
+                knob.style.left = '3px';
+                statusText.style.background = 'rgba(255,255,255,0.03)';
+                statusText.style.color = 'var(--text-muted)';
+                statusText.innerHTML = '⏸️ Auto-fix is <strong>DISABLED</strong>. Use manual "Fix Now" buttons on alerts.';
+            }
+        })
+        .catch(err => console.error('Toggle failed:', err));
+    }
+
+    // ─── FIX HISTORY ─────────────────────────────────────────────
+    function loadFixHistory() {
+        const panel = document.getElementById('fix-history-panel');
+        fetch(`/server/${SERVER_ID}/api/fix/history/`)
+            .then(r => r.json())
+            .then(data => {
+                if (!data.history || data.history.length === 0) {
+                    panel.innerHTML = '<div style="padding:2rem; text-align:center; color:var(--text-muted); font-size:0.85rem;">No fix executions recorded yet.</div>';
+                    return;
+                }
+                let html = '<table style="width:100%; border-collapse:collapse; font-size:0.8rem;">';
+                html += '<thead><tr style="border-bottom:1px solid var(--border-color); color:var(--text-muted);">';
+                html += '<th style="padding:10px 12px; text-align:left;">Metric</th>';
+                html += '<th style="padding:10px 12px; text-align:left;">Status</th>';
+                html += '<th style="padding:10px 12px; text-align:left;">Type</th>';
+                html += '<th style="padding:10px 12px; text-align:left;">Time</th>';
+                html += '</tr></thead><tbody>';
+
+                data.history.forEach(e => {
+                    const statusColor = e.status === 'success' ? '#10b981' :
+                                        e.status === 'partial' ? '#f59e0b' : '#ef4444';
+                    const dt = new Date(e.created_at);
+                    html += `<tr style="border-bottom:1px solid rgba(255,255,255,0.02);">
+                        <td style="padding:8px 12px; color:var(--text-primary);">${e.metric_name}</td>
+                        <td style="padding:8px 12px; color:${statusColor}; font-weight:600;">${e.status.toUpperCase()}</td>
+                        <td style="padding:8px 12px; color:var(--text-muted);">${e.triggered_by}</td>
+                        <td style="padding:8px 12px; color:var(--text-muted);">${dt.toLocaleString()}</td>
+                    </tr>`;
+                });
+                html += '</tbody></table>';
+                panel.innerHTML = html;
+            })
+            .catch(() => {
+                panel.innerHTML = '<div style="padding:2rem; text-align:center; color:var(--text-muted); font-size:0.85rem;">No fix executions recorded yet.</div>';
+            });
+    }
+
+    // Load fix history on page load
+    document.addEventListener('DOMContentLoaded', loadFixHistory);
+</script>
 {% endblock %}
