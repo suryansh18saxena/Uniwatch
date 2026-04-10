@@ -1,0 +1,115 @@
+{% extends "monitor/base.html" %}
+
+{% block title %}Add Server{% endblock %}
+{% block nav_add %}active{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Add New Server</h1>
+    <p>Provide your server details and SSH key. We'll automatically install monitoring agents.</p>
+</div>
+
+<div style="max-width: 640px;">
+    <div class="glass-card">
+        <h2>🖥️ Server Details</h2>
+        <form method="post" id="add-server-form">
+            {% csrf_token %}
+
+            <div class="form-group">
+                <label for="id_name">Server Name</label>
+                {{ form.name }}
+                {% if form.name.errors %}
+                <div class="help-text" style="color: var(--danger);">{{ form.name.errors.0 }}</div>
+                {% endif %}
+                <div class="help-text">A friendly name to identify this server.</div>
+            </div>
+
+            <div class="form-group">
+                <label for="id_ip_address">IP Address</label>
+                {{ form.ip_address }}
+                {% if form.ip_address.errors %}
+                <div class="help-text" style="color: var(--danger);">{{ form.ip_address.errors.0 }}</div>
+                {% endif %}
+                <div class="help-text">Public IP address of your server (e.g., 54.123.45.67).</div>
+            </div>
+
+            <div class="form-group">
+                <label for="id_ssh_user">SSH Username</label>
+                {{ form.ssh_user }}
+                {% if form.ssh_user.errors %}
+                <div class="help-text" style="color: var(--danger);">{{ form.ssh_user.errors.0 }}</div>
+                {% endif %}
+                <div class="help-text">Usually "ubuntu" for Ubuntu, "ec2-user" for Amazon Linux.</div>
+            </div>
+
+            <div class="form-group">
+                <label for="id_ssh_private_key">SSH Private Key</label>
+                {{ form.ssh_private_key }}
+                {% if form.ssh_private_key.errors %}
+                <div class="help-text" style="color: var(--danger);">{{ form.ssh_private_key.errors.0 }}</div>
+                {% endif %}
+                <div class="help-text" style="display: flex; align-items: center; gap: 6px;">
+                    🔒 <strong>Secure:</strong> Your key is used once for setup and immediately deleted. We never store it.
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>Container Monitoring</label>
+                <label class="form-checkbox-wrapper" for="id_has_containers">
+                    {{ form.has_containers }}
+                    <div>
+                        <strong style="color: var(--text-primary);">🐳 Install cAdvisor</strong>
+                        <div class="help-text" style="margin-top: 2px;">
+                            Check this if your server runs Docker containers. cAdvisor will be installed to monitor container resources.
+                        </div>
+                    </div>
+                </label>
+            </div>
+
+            <div style="display: flex; gap: 0.75rem; margin-top: 1.5rem;">
+                <button type="submit" class="btn btn-primary" id="btn-submit-server" style="flex: 1;">
+                    🚀 Deploy Monitoring Agents
+                </button>
+                <a href="{% url 'dashboard' %}" class="btn btn-ghost" id="btn-cancel">
+                    Cancel
+                </a>
+            </div>
+        </form>
+    </div>
+
+    <!-- Info Card -->
+    <div class="glass-card" style="border-color: rgba(99, 102, 241, 0.15);">
+        <h2>ℹ️ What happens next?</h2>
+        <div style="color: var(--text-secondary); font-size: 0.9rem; line-height: 1.8;">
+            <p>When you click <strong>"Deploy Monitoring Agents"</strong>, we will:</p>
+            <ol style="margin-top: 0.5rem; padding-left: 1.5rem;">
+                <li>Connect to your server via SSH</li>
+                <li>Install <strong>Prometheus Node Exporter</strong> (port 9100) for system metrics</li>
+                {% if form.has_containers.value %}
+                <li>Install <strong>cAdvisor</strong> (port 8080) for container metrics</li>
+                {% else %}
+                <li>Optionally install <strong>cAdvisor</strong> if you check the container monitoring box</li>
+                {% endif %}
+                <li>Register the server with our Prometheus instance</li>
+                <li><strong style="color: var(--success);">Delete your SSH key from memory</strong> — we never store it</li>
+            </ol>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Add loading state to form on submit
+    const form = document.getElementById('add-server-form');
+    const submitBtn = document.getElementById('btn-submit-server');
+
+    form.addEventListener('submit', function() {
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<span style="animation: pulse 1s infinite;">⏳</span> Connecting & Installing... This may take 1-2 minutes';
+        submitBtn.style.opacity = '0.7';
+        submitBtn.style.cursor = 'wait';
+    });
+</script>
+{% endblock %}

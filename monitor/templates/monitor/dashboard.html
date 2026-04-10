@@ -1,0 +1,106 @@
+{% extends "monitor/base.html" %}
+
+{% block title %}Dashboard{% endblock %}
+{% block nav_dashboard %}active{% endblock %}
+
+{% block content %}
+<!-- Page Header -->
+<div class="page-header">
+    <h1>Infrastructure Dashboard</h1>
+    <p>Monitor and manage all your servers from one place.</p>
+</div>
+
+<!-- Stats Cards -->
+<div class="stats-grid">
+    <div class="stat-card total" id="stat-total">
+        <div class="stat-label">Total Servers</div>
+        <div class="stat-value">{{ stats.total }}</div>
+    </div>
+    <div class="stat-card active" id="stat-active">
+        <div class="stat-label">Active & Healthy</div>
+        <div class="stat-value">{{ stats.active }}</div>
+    </div>
+    <div class="stat-card failed" id="stat-failed">
+        <div class="stat-label">Failed Setup</div>
+        <div class="stat-value">{{ stats.failed }}</div>
+    </div>
+    <div class="stat-card pending" id="stat-pending">
+        <div class="stat-label">Pending</div>
+        <div class="stat-value">{{ stats.pending }}</div>
+    </div>
+</div>
+
+<!-- Actions Bar -->
+<div class="actions-bar">
+    <div class="section-title">Your Servers</div>
+    <a href="{% url 'add_server' %}" class="btn btn-primary" id="btn-add-server">
+        ➕ Add New Server
+    </a>
+</div>
+
+<!-- Server List -->
+<div class="glass-card">
+    {% if servers %}
+    <table class="server-table" id="server-table">
+        <thead>
+            <tr>
+                <th>Server Name</th>
+                <th>IP Address</th>
+                <th>SSH User</th>
+                <th>Monitoring</th>
+                <th>Status</th>
+                <th>Added</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for server in servers %}
+            <tr id="server-row-{{ server.id }}">
+                <td>
+                    <span class="server-name">{{ server.status_emoji }} {{ server.name }}</span>
+                </td>
+                <td>
+                    <span class="server-ip">{{ server.ip_address }}</span>
+                </td>
+                <td>{{ server.ssh_user }}</td>
+                <td>
+                    <span class="badge badge-info">node_exporter</span>
+                    {% if server.has_containers %}
+                    <span class="badge badge-info" style="margin-left: 4px;">cAdvisor</span>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if server.setup_status == 'success' %}
+                        <span class="badge badge-success"><span class="pulse-dot"></span> Active</span>
+                    {% elif server.setup_status == 'failed' %}
+                        <span class="badge badge-danger"><span class="pulse-dot"></span> Failed</span>
+                    {% elif server.setup_status == 'running' %}
+                        <span class="badge badge-warning"><span class="pulse-dot"></span> Running</span>
+                    {% else %}
+                        <span class="badge badge-warning"><span class="pulse-dot"></span> Pending</span>
+                    {% endif %}
+                </td>
+                <td style="color: var(--text-muted); font-size: 0.85rem;">
+                    {{ server.created_at|timesince }} ago
+                </td>
+                <td>
+                    <a href="{% url 'server_detail' server.id %}" class="btn btn-ghost btn-sm" id="btn-view-{{ server.id }}">
+                        View →
+                    </a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <div class="empty-state" id="empty-state">
+        <div class="empty-icon">🖥️</div>
+        <h3>No servers yet</h3>
+        <p>Add your first server to start monitoring its infrastructure.</p>
+        <a href="{% url 'add_server' %}" class="btn btn-primary" id="btn-add-first-server">
+            ➕ Add Your First Server
+        </a>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

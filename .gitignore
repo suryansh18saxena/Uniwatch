@@ -7,4 +7,4 @@ prometheus/prometheus_data/
 .env
 *.pem
 *.key
-templates
+

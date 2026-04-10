@@ -1,0 +1,160 @@
+{% extends "monitor/base.html" %}
+
+{% block title %}{{ server.name }}{% endblock %}
+
+{% block content %}
+<!-- Detail Header -->
+<div class="detail-header" style="margin-bottom: 2rem;">
+    <div class="server-info">
+        <h1 id="server-name">{{ server.status_emoji }} {{ server.name }}</h1>
+        <span class="server-ip-large" id="server-ip">{{ server.ip_address }}</span>
+        <span style="margin-left: 1rem;">
+            {% if server.setup_status == 'success' %}
+                <span class="badge badge-success"><span class="pulse-dot"></span> Active</span>
+            {% elif server.setup_status == 'failed' %}
+                <span class="badge badge-danger"><span class="pulse-dot"></span> Failed</span>
+            {% elif server.setup_status == 'running' %}
+                <span class="badge badge-warning"><span class="pulse-dot"></span> Running</span>
+            {% else %}
+                <span class="badge badge-warning"><span class="pulse-dot"></span> Pending</span>
+            {% endif %}
+        </span>
+    </div>
+    <div class="detail-actions">
+        <a href="{% url 'dashboard' %}" class="btn btn-ghost" id="btn-back">← Back</a>
+        <form method="post" action="{% url 'delete_server' server.id %}" style="display: inline;" id="delete-form">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger btn-sm" id="btn-delete"
+                    onclick="return confirm('Are you sure you want to remove this server?')">
+                🗑️ Delete
+            </button>
+        </form>
+    </div>
+</div>
+
+<!-- Server Info Cards -->
+<div class="stats-grid" style="grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));">
+    <div class="stat-card" id="info-user">
+        <div class="stat-label">SSH User</div>
+        <div class="stat-value" style="font-size: 1.3rem;">{{ server.ssh_user }}</div>
+    </div>
+    <div class="stat-card" id="info-agents">
+        <div class="stat-label">Monitoring Agents</div>
+        <div class="stat-value" style="font-size: 1rem;">
+            <span class="badge badge-info">node_exporter :{{ server.node_exporter_port }}</span>
+            {% if server.has_containers %}
+            <br><span class="badge badge-info" style="margin-top: 4px; display: inline-flex;">cAdvisor :{{ server.cadvisor_port }}</span>
+            {% endif %}
+        </div>
+    </div>
+    <div class="stat-card" id="info-added">
+        <div class="stat-label">Added</div>
+        <div class="stat-value" style="font-size: 1rem; color: var(--text-secondary);">{{ server.created_at|timesince }} ago</div>
+    </div>
+    <div class="stat-card" id="info-updated">
+        <div class="stat-label">Last Updated</div>
+        <div class="stat-value" style="font-size: 1rem; color: var(--text-secondary);">{{ server.updated_at|timesince }} ago</div>
+    </div>
+</div>
+
+<!-- Live Metrics (from Prometheus) -->
+{% if server.is_active and metrics and not metrics.error %}
+<div class="section-title">📊 Live Metrics</div>
+<div class="metrics-grid">
+    {% if metrics.cpu_usage is not None %}
+    <div class="metric-card {% if metrics.cpu_usage > 90 %}critical{% elif metrics.cpu_usage > 70 %}warn{% else %}good{% endif %}" id="metric-cpu">
+        <div class="metric-icon">💻</div>
+        <div class="metric-label">CPU Usage</div>
+        <div class="metric-value">{{ metrics.cpu_usage }}<span class="metric-unit">%</span></div>
+    </div>
+    {% endif %}
+
+    {% if metrics.memory_usage is not None %}
+    <div class="metric-card {% if metrics.memory_usage > 90 %}critical{% elif metrics.memory_usage > 75 %}warn{% else %}good{% endif %}" id="metric-memory">
+        <div class="metric-icon">🧠</div>
+        <div class="metric-label">Memory Usage</div>
+        <div class="metric-value">{{ metrics.memory_usage }}<span class="metric-unit">%</span></div>
+        {% if metrics.memory_total_gb %}
+        <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 4px;">of {{ metrics.memory_total_gb }} GB</div>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    {% if metrics.disk_usage is not None %}
+    <div class="metric-card {% if metrics.disk_usage > 90 %}critical{% elif metrics.disk_usage > 80 %}warn{% else %}good{% endif %}" id="metric-disk">
+        <div class="metric-icon">💾</div>
+        <div class="metric-label">Disk Usage</div>
+        <div class="metric-value">{{ metrics.disk_usage }}<span class="metric-unit">%</span></div>
+    </div>
+    {% endif %}
+
+    {% if metrics.uptime_hours is not None %}
+    <div class="metric-card good" id="metric-uptime">
+        <div class="metric-icon">⏱️</div>
+        <div class="metric-label">Uptime</div>
+        <div class="metric-value">{{ metrics.uptime_hours }}<span class="metric-unit">hrs</span></div>
+    </div>
+    {% endif %}
+
+    {% if metrics.network_rx_mbps is not None %}
+    <div class="metric-card" id="metric-network">
+        <div class="metric-icon">🌐</div>
+        <div class="metric-label">Network RX</div>
+        <div class="metric-value">{{ metrics.network_rx_mbps }}<span class="metric-unit">MB/s</span></div>
+    </div>
+    {% endif %}
+</div>
+{% elif server.is_active %}
+<div class="glass-card" style="text-align: center; padding: 2rem;">
+    <div style="font-size: 2rem; margin-bottom: 0.5rem;">📡</div>
+    <h3 style="color: var(--text-secondary); font-size: 1rem;">Waiting for Metrics</h3>
+    <p style="color: var(--text-muted); font-size: 0.875rem;">
+        {% if metrics.error %}
+            {{ metrics.error }}<br>
+        {% endif %}
+        Make sure Prometheus is running: <code style="background: rgba(0,0,0,0.3); padding: 2px 8px; border-radius: 4px;">docker-compose up -d</code> in the <code>prometheus/</code> directory.
+    </p>
+</div>
+{% endif %}
+
+<!-- Retry Setup (for failed servers) -->
+{% if server.setup_status == 'failed' %}
+<div class="glass-card" style="border-color: rgba(239, 68, 68, 0.2);">
+    <h2>🔄 Retry Setup</h2>
+    <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 1rem;">
+        The setup failed. You can retry by providing your SSH key again.
+    </p>
+    <form method="post" action="{% url 'retry_setup' server.id %}" id="retry-form">
+        {% csrf_token %}
+        <div class="form-group">
+            <label for="retry_key">SSH Private Key</label>
+            <textarea class="form-input" name="ssh_private_key" id="retry_key" rows="6"
+                      placeholder="-----BEGIN RSA PRIVATE KEY-----&#10;Paste your key here...&#10;-----END RSA PRIVATE KEY-----" required></textarea>
+            <div class="help-text">🔒 Used once for retry, then immediately deleted.</div>
+        </div>
+        <button type="submit" class="btn btn-primary" id="btn-retry">
+            🔄 Retry Setup
+        </button>
+    </form>
+</div>
+{% endif %}
+
+<!-- Setup Logs -->
+{% if server.setup_logs %}
+<div class="section-title">📋 Setup Logs</div>
+<div class="glass-card">
+    <div class="log-viewer" id="setup-logs">{{ server.setup_logs }}</div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+{% if server.is_active %}
+<script>
+    // Auto-refresh metrics every 30 seconds
+    setTimeout(function() {
+        location.reload();
+    }, 30000);
+</script>
+{% endif %}
+{% endblock %}
