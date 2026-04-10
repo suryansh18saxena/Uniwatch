@@ -1,0 +1,189 @@
+{% extends "monitor/base.html" %}
+
+{% block title %}Alerts{% endblock %}
+{% block nav_alerts %}active{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>🚨 Alert Center</h1>
+    <p>Monitor threshold violations and apply one-click fixes via SSH.</p>
+</div>
+
+<!-- Alert Stats -->
+<div class="stats-grid" style="grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));">
+    <a href="?status=open" class="stat-card {% if current_filter == 'open' %}total{% endif %}" id="filter-open" style="text-decoration: none; cursor: pointer;">
+        <div class="stat-label">🚨 Open</div>
+        <div class="stat-value" style="color: var(--danger);">{{ alert_counts.open }}</div>
+    </a>
+    <a href="?status=fixing" class="stat-card {% if current_filter == 'fixing' %}total{% endif %}" id="filter-fixing" style="text-decoration: none; cursor: pointer;">
+        <div class="stat-label">🔧 Fixing</div>
+        <div class="stat-value" style="color: var(--warning);">{{ alert_counts.fixing }}</div>
+    </a>
+    <a href="?status=fixed" class="stat-card {% if current_filter == 'fixed' %}total{% endif %}" id="filter-fixed" style="text-decoration: none; cursor: pointer;">
+        <div class="stat-label">✅ Fixed</div>
+        <div class="stat-value" style="color: var(--success);">{{ alert_counts.fixed }}</div>
+    </a>
+    <a href="?status=failed" class="stat-card {% if current_filter == 'failed' %}total{% endif %}" id="filter-failed" style="text-decoration: none; cursor: pointer;">
+        <div class="stat-label">❌ Failed</div>
+        <div class="stat-value" style="color: var(--danger);">{{ alert_counts.failed }}</div>
+    </a>
+    <a href="?status=all" class="stat-card {% if current_filter == 'all' %}total{% endif %}" id="filter-all" style="text-decoration: none; cursor: pointer;">
+        <div class="stat-label">📋 All</div>
+        <div class="stat-value" style="color: var(--accent-primary);">{{ alert_counts.all }}</div>
+    </a>
+</div>
+
+<!-- Actions Bar -->
+<div class="actions-bar">
+    <div class="section-title">
+        {% if current_filter == 'open' %}Open Alerts{% elif current_filter == 'fixing' %}Fixes In Progress{% elif current_filter == 'fixed' %}Fixed Alerts{% elif current_filter == 'failed' %}Failed Fixes{% else %}All Alerts{% endif %}
+    </div>
+    <form method="post" action="{% url 'check_alerts' %}" style="display: inline;">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-primary" id="btn-check-alerts">
+            🔍 Check Now
+        </button>
+    </form>
+</div>
+
+<!-- Alerts List -->
+<div class="glass-card">
+    {% if alerts %}
+    <div class="alerts-list" id="alerts-list">
+        {% for alert in alerts %}
+        <div class="alert-item" id="alert-item-{{ alert.id }}" style="
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 1rem;
+            padding: 1.25rem;
+            border-bottom: 1px solid rgba(255,255,255,0.04);
+            transition: background 0.15s;
+            flex-wrap: wrap;
+        " onmouseover="this.style.background='rgba(255,255,255,0.02)'" onmouseout="this.style.background='transparent'">
+
+            <!-- Left: Alert Info -->
+            <div style="flex: 1; min-width: 200px;">
+                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
+                    <span style="font-size: 1.2rem;">{{ alert.status_emoji }}</span>
+                    {% if alert.severity == 'critical' %}
+                        <span class="badge badge-danger">CRITICAL</span>
+                    {% else %}
+                        <span class="badge badge-warning">WARNING</span>
+                    {% endif %}
+                    <span style="font-weight: 700; color: var(--text-primary);">{{ alert.title }}</span>
+                </div>
+                <div style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 4px;">
+                    {{ alert.description }}
+                </div>
+                <div style="display: flex; gap: 1rem; font-size: 0.75rem; color: var(--text-muted);">
+                    <span>🖥️ {{ alert.server.name }}</span>
+                    <span style="font-family: 'JetBrains Mono', monospace;">{{ alert.server.ip_address }}</span>
+                    <span>⏱️ {{ alert.created_at|timesince }} ago</span>
+                </div>
+            </div>
+
+            <!-- Middle: Metric Value -->
+            <div style="text-align: center; min-width: 100px;">
+                {% if alert.metric_value is not None %}
+                <div style="
+                    font-family: 'JetBrains Mono', monospace;
+                    font-size: 1.5rem;
+                    font-weight: 800;
+                    color: {% if alert.severity == 'critical' %}var(--danger){% else %}var(--warning){% endif %};
+                ">
+                    {{ alert.metric_value }}%
+                </div>
+                <div style="font-size: 0.7rem; color: var(--text-muted);">
+                    threshold: {{ alert.threshold_value }}%
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- Right: Actions -->
+            <div style="display: flex; gap: 0.5rem; align-items: center; flex-shrink: 0;">
+                {% if alert.status == 'open' and alert.has_fix %}
+                <a href="{% url 'alert_detail' alert.id %}" class="btn btn-primary btn-sm" id="btn-fix-{{ alert.id }}" style="
+                    background: linear-gradient(135deg, #f59e0b, #f97316);
+                    animation: fixPulse 2s infinite;
+                ">
+                    🔧 Fix Now
+                </a>
+                {% elif alert.status == 'fixed' %}
+                <span class="badge badge-success" style="padding: 6px 14px;">✅ Fixed</span>
+                {% elif alert.status == 'fixing' %}
+                <span class="badge badge-warning" style="padding: 6px 14px; animation: pulse 1s infinite;">🔧 Fixing...</span>
+                {% elif alert.status == 'failed' %}
+                <a href="{% url 'alert_detail' alert.id %}" class="btn btn-danger btn-sm" id="btn-retry-fix-{{ alert.id }}">
+                    🔄 Retry
+                </a>
+                {% endif %}
+
+                {% if alert.status == 'open' %}
+                <form method="post" action="{% url 'dismiss_alert' alert.id %}" style="display: inline;">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-ghost btn-sm" id="btn-dismiss-{{ alert.id }}" title="Dismiss">
+                        🔕
+                    </button>
+                </form>
+                {% endif %}
+
+                <a href="{% url 'alert_detail' alert.id %}" class="btn btn-ghost btn-sm" id="btn-detail-{{ alert.id }}">
+                    View →
+                </a>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state" id="empty-alerts">
+        <div class="empty-icon">
+            {% if current_filter == 'open' %}✅{% else %}📋{% endif %}
+        </div>
+        <h3>
+            {% if current_filter == 'open' %}
+                No open alerts — everything looks healthy!
+            {% else %}
+                No {{ current_filter }} alerts found
+            {% endif %}
+        </h3>
+        <p>
+            {% if current_filter == 'open' %}
+                Click "Check Now" to scan all servers against your alert rules.
+            {% else %}
+                Try a different filter or run a check.
+            {% endif %}
+        </p>
+        <form method="post" action="{% url 'check_alerts' %}" style="display: inline;">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-primary" id="btn-check-empty">
+                🔍 Run Alert Check
+            </button>
+        </form>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Info Box -->
+<div class="glass-card" style="border-color: rgba(99, 102, 241, 0.15); margin-top: 1rem;">
+    <h2>💡 How Alerts Work</h2>
+    <div style="color: var(--text-secondary); font-size: 0.875rem; line-height: 1.8;">
+        <ol style="padding-left: 1.5rem;">
+            <li><strong>Configure rules</strong> in the <a href="{% url 'admin:index' %}" style="color: var(--accent-primary);">Admin Panel</a> → Alert Rules (set CPU > 90%, Disk > 85%, etc.)</li>
+            <li><strong>Click "Check Now"</strong> to scan all active servers against your rules</li>
+            <li>If a threshold is exceeded, an alert appears with a <strong style="color: var(--warning);">🔧 Fix Now</strong> button</li>
+            <li>Click Fix → enter SSH key → we <strong>SSH into your server</strong> and execute the fix</li>
+            <li>Your SSH key is <strong style="color: var(--success);">deleted immediately</strong> after use</li>
+        </ol>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<style>
+    @keyframes fixPulse {
+        0%, 100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.4); }
+        50% { box-shadow: 0 0 15px 5px rgba(245, 158, 11, 0.2); }
+    }
+</style>
+{% endblock %}

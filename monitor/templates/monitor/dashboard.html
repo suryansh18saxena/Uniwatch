@@ -24,10 +24,10 @@
         <div class="stat-label">Failed Setup</div>
         <div class="stat-value">{{ stats.failed }}</div>
     </div>
-    <div class="stat-card pending" id="stat-pending">
-        <div class="stat-label">Pending</div>
-        <div class="stat-value">{{ stats.pending }}</div>
-    </div>
+    <a href="{% url 'alerts_list' %}" class="stat-card pending" id="stat-alerts" style="text-decoration: none; cursor: pointer;">
+        <div class="stat-label">🚨 Open Alerts</div>
+        <div class="stat-value">{{ stats.alerts }}</div>
+    </a>
 </div>
 
 <!-- Actions Bar -->

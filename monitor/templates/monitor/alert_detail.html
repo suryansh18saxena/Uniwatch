@@ -1,0 +1,221 @@
+{% extends "monitor/base.html" %}
+
+{% block title %}Alert: {{ alert.title }}{% endblock %}
+{% block nav_alerts %}active{% endblock %}
+
+{% block content %}
+<!-- Back & Header -->
+<div class="detail-header" style="margin-bottom: 2rem;">
+    <div class="server-info">
+        <h1 id="alert-title" style="-webkit-text-fill-color: unset; background: none;">
+            {{ alert.status_emoji }} {{ alert.title }}
+        </h1>
+        <div style="display: flex; align-items: center; gap: 1rem; margin-top: 0.25rem;">
+            {% if alert.severity == 'critical' %}
+                <span class="badge badge-danger" style="font-size: 0.8rem; padding: 5px 14px;">🔴 CRITICAL</span>
+            {% else %}
+                <span class="badge badge-warning" style="font-size: 0.8rem; padding: 5px 14px;">⚠️ WARNING</span>
+            {% endif %}
+
+            {% if alert.status == 'open' %}
+                <span class="badge badge-danger"><span class="pulse-dot"></span> Open</span>
+            {% elif alert.status == 'fixing' %}
+                <span class="badge badge-warning"><span class="pulse-dot"></span> Fixing</span>
+            {% elif alert.status == 'fixed' %}
+                <span class="badge badge-success"><span class="pulse-dot"></span> Fixed</span>
+            {% elif alert.status == 'failed' %}
+                <span class="badge badge-danger"><span class="pulse-dot"></span> Fix Failed</span>
+            {% elif alert.status == 'dismissed' %}
+                <span class="badge badge-info">🔕 Dismissed</span>
+            {% endif %}
+        </div>
+    </div>
+    <div class="detail-actions">
+        <a href="{% url 'alerts_list' %}" class="btn btn-ghost" id="btn-back-alerts">← Alerts</a>
+        <a href="{% url 'server_detail' alert.server.id %}" class="btn btn-ghost" id="btn-go-server">🖥️ Server</a>
+    </div>
+</div>
+
+<!-- Alert Info Cards -->
+<div class="stats-grid" style="grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));">
+    <div class="stat-card" id="info-server">
+        <div class="stat-label">Server</div>
+        <div style="font-weight: 700; font-size: 1.1rem; color: var(--text-primary);">{{ alert.server.name }}</div>
+        <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.85rem; color: var(--accent-primary); margin-top: 2px;">{{ alert.server.ip_address }}</div>
+    </div>
+
+    {% if alert.metric_value is not None %}
+    <div class="stat-card" id="info-metric">
+        <div class="stat-label">Metric Value</div>
+        <div class="stat-value" style="color: {% if alert.severity == 'critical' %}var(--danger){% else %}var(--warning){% endif %};">
+            {{ alert.metric_value }}%
+        </div>
+    </div>
+    <div class="stat-card" id="info-threshold">
+        <div class="stat-label">Threshold</div>
+        <div class="stat-value" style="color: var(--text-muted);">
+            {{ alert.threshold_value }}%
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="stat-card" id="info-created">
+        <div class="stat-label">Triggered</div>
+        <div style="font-size: 1rem; color: var(--text-secondary); font-weight: 600;">{{ alert.created_at|timesince }} ago</div>
+    </div>
+
+    {% if alert.fixed_at %}
+    <div class="stat-card" id="info-fixed">
+        <div class="stat-label">Fixed At</div>
+        <div style="font-size: 1rem; color: var(--success); font-weight: 600;">{{ alert.fixed_at|timesince }} ago</div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Alert Description -->
+{% if alert.description %}
+<div class="glass-card">
+    <h2>📋 Description</h2>
+    <p style="color: var(--text-secondary);">{{ alert.description }}</p>
+</div>
+{% endif %}
+
+<!-- Fix Section -->
+{% if alert.has_fix %}
+<div class="section-title">🔧 Fix Action</div>
+
+<!-- Fix Info Card -->
+<div class="glass-card" style="border-color: {% if alert.status == 'open' %}rgba(245, 158, 11, 0.2){% elif alert.status == 'fixed' %}rgba(16, 185, 129, 0.2){% elif alert.status == 'failed' %}rgba(239, 68, 68, 0.2){% else %}var(--border-color){% endif %};">
+
+    <!-- Fix Description -->
+    <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 1rem;">
+        <span style="font-size: 1.5rem;">🛠️</span>
+        <div>
+            <div style="font-weight: 700; color: var(--text-primary); font-size: 1rem;">{{ alert.fix_description }}</div>
+            <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 2px;">
+                This will SSH into {{ alert.server.name }} and execute the fix commands below
+            </div>
+        </div>
+    </div>
+
+    <!-- Fix Commands Preview -->
+    <div style="margin-bottom: 1.25rem;">
+        <div style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); font-weight: 600; margin-bottom: 0.5rem;">
+            Commands to Execute
+        </div>
+        <div class="log-viewer" style="max-height: 200px; font-size: 0.78rem;">{% for line in alert.fix_command.splitlines %}$ {{ line }}
+{% endfor %}</div>
+    </div>
+
+    <!-- Fix Form (for open or failed alerts) -->
+    {% if alert.status == 'open' or alert.status == 'failed' %}
+    <div style="
+        background: rgba(0,0,0,0.2);
+        border: 1px solid rgba(245, 158, 11, 0.15);
+        border-radius: var(--radius-md);
+        padding: 1.25rem;
+    ">
+        <form method="post" action="{% url 'execute_fix' alert.id %}" id="fix-form">
+            {% csrf_token %}
+
+            <div style="font-weight: 700; color: var(--text-primary); margin-bottom: 0.75rem; font-size: 0.95rem;">
+                🔑 Enter SSH Key to Execute Fix
+            </div>
+
+            <div class="form-group" style="margin-bottom: 1rem;">
+                <textarea
+                    class="form-input"
+                    name="ssh_private_key"
+                    id="fix_ssh_key"
+                    rows="5"
+                    placeholder="-----BEGIN RSA PRIVATE KEY-----&#10;Paste your SSH private key here...&#10;-----END RSA PRIVATE KEY-----"
+                    required
+                    style="font-size: 0.78rem;"
+                ></textarea>
+                <div class="help-text" style="display: flex; align-items: center; gap: 6px; margin-top: 0.3rem;">
+                    🔒 <strong>Secure:</strong> Key is used once to execute the fix, then immediately deleted from memory.
+                </div>
+            </div>
+
+            <button type="submit" class="btn btn-primary" id="btn-execute-fix" style="
+                background: linear-gradient(135deg, #f59e0b, #f97316);
+                width: 100%;
+            ">
+                🔧 Execute Fix via SSH
+            </button>
+        </form>
+
+        {% if alert.status == 'open' %}
+        <form method="post" action="{% url 'dismiss_alert' alert.id %}" style="margin-top: 0.75rem;">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-ghost" id="btn-dismiss-detail" style="width: 100%;">
+                🔕 Dismiss
+            </button>
+        </form>
+        {% endif %}
+    </div>
+    {% elif alert.status == 'fixed' %}
+    <div style="
+        background: var(--success-bg);
+        border: 1px solid rgba(16, 185, 129, 0.2);
+        border-radius: var(--radius-md);
+        padding: 1rem 1.25rem;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    ">
+        <span style="font-size: 1.3rem;">✅</span>
+        <div>
+            <div style="font-weight: 700; color: var(--success);">Fix Applied Successfully</div>
+            <div style="font-size: 0.85rem; color: var(--text-secondary);">
+                Fixed {{ alert.fixed_at|timesince }} ago
+            </div>
+        </div>
+    </div>
+    {% elif alert.status == 'fixing' %}
+    <div style="
+        background: var(--warning-bg);
+        border: 1px solid rgba(245, 158, 11, 0.2);
+        border-radius: var(--radius-md);
+        padding: 1rem 1.25rem;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    ">
+        <span style="font-size: 1.3rem; animation: pulse 1s infinite;">🔧</span>
+        <div>
+            <div style="font-weight: 700; color: var(--warning);">Fix In Progress...</div>
+            <div style="font-size: 0.85rem; color: var(--text-secondary);">
+                The fix command is being executed on the server.
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endif %}
+
+<!-- Fix Execution Logs -->
+{% if alert.fix_logs %}
+<div class="section-title">📜 Fix Execution Logs</div>
+<div class="glass-card">
+    <div class="log-viewer" id="fix-logs" style="max-height: 600px;">{{ alert.fix_logs }}</div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Loading state on fix submit
+    const fixForm = document.getElementById('fix-form');
+    const fixBtn = document.getElementById('btn-execute-fix');
+
+    if (fixForm && fixBtn) {
+        fixForm.addEventListener('submit', function() {
+            fixBtn.disabled = true;
+            fixBtn.innerHTML = '<span style="animation: pulse 1s infinite;">🔧</span> Connecting & Executing Fix...';
+            fixBtn.style.opacity = '0.7';
+            fixBtn.style.cursor = 'wait';
+        });
+    }
+</script>
+{% endblock %}

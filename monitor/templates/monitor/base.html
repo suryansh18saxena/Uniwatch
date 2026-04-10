@@ -718,6 +718,9 @@
             <a href="{% url 'dashboard' %}" class="nav-link {% block nav_dashboard %}{% endblock %}" id="nav-dashboard">
                 📊 Dashboard
             </a>
+            <a href="{% url 'alerts_list' %}" class="nav-link {% block nav_alerts %}{% endblock %}" id="nav-alerts" style="position: relative;">
+                🚨 Alerts
+            </a>
             <a href="{% url 'add_server' %}" class="nav-link {% block nav_add %}{% endblock %}" id="nav-add-server">
                 ➕ Add Server
             </a>
