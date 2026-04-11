@@ -1,34 +1,42 @@
 # Prometheus Configuration for Uniwatch
-# Uses file-based service discovery to auto-detect new servers
+# Uses file-based service discovery to automatically detect new servers.
+#
+# USAGE (local dev):
+#   prometheus --config.file=prometheus/prometheus.yml
+#
+# IMPORTANT: Update the file_sd_configs paths below to match your
+# absolute path to the targets/ directory in this repo.
+# Example: /home/youruser/Uniwatch1/prometheus/targets/uniwatch_targets.json
 
 global:
   scrape_interval: 15s
   evaluation_interval: 15s
   scrape_timeout: 10s
 
-# Scrape configurations
 scrape_configs:
+
   # Self-monitoring
   - job_name: 'prometheus'
     static_configs:
       - targets: ['localhost:9090']
 
-  # Node Exporter targets (auto-discovered from JSON files)
+  # Node Exporter targets — auto-discovered from JSON file
+  # The Django app writes to this file when you add a server.
   - job_name: 'node_exporter'
     file_sd_configs:
       - files:
-          - '/etc/prometheus/targets/uniwatch_targets.json'
+          - 'prometheus/targets/uniwatch_targets.json'
         refresh_interval: 10s
     relabel_configs:
       - source_labels: [job]
         regex: 'node_exporter'
         action: keep
 
-  # cAdvisor targets (auto-discovered from JSON files)
+  # cAdvisor targets — auto-discovered from JSON file
   - job_name: 'cadvisor'
     file_sd_configs:
       - files:
-          - '/etc/prometheus/targets/uniwatch_targets.json'
+          - 'prometheus/targets/uniwatch_targets.json'
         refresh_interval: 10s
     relabel_configs:
       - source_labels: [job]

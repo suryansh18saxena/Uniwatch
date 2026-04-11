@@ -7,12 +7,11 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.http import JsonResponse
 from django.contrib import messages
 from django.utils import timezone
-from django.http import JsonResponse
-from .models import Server, AlertRule, Alert
+from .models import Server, Alert
 from .forms import AddServerForm
-from .utils import setup_server, execute_remote_fix
+from .utils import setup_server, remove_prometheus_target
 from .prometheus_client import query_prometheus, get_server_metrics, check_prometheus_health
-from .fix_actions import get_fix_for_alert, FIX_ACTIONS
+from .fix_actions import get_fix_actions, FIX_ACTIONS
 
 
 def landing_page(request):
@@ -20,19 +19,7 @@ def landing_page(request):
     return render(request, 'monitor/landing.html')
 
 
-def dashboard(request):
-    """Main dashboard showing all monitored servers."""
-    servers = Server.objects.all()
-    
-    first_server = servers.first()
-    if first_server:
-        return redirect('server_detail', server_id=first_server.id)
 
-    stats = {'total': 0, 'active': 0, 'failed': 0, 'pending': 0}
-    return render(request, 'monitor/dashboard.html', {
-        'servers': servers,
-        'stats': stats,
-    })
 
 
 def add_server(request):
@@ -76,7 +63,10 @@ def add_server(request):
     else:
         form = AddServerForm()
 
-    return render(request, 'monitor/add_server.html', {'form': form})
+    return render(request, 'monitor/add_server.html', {
+        'form': form,
+        'all_servers': Server.objects.all(),
+    })
 
 
 def server_detail(request, server_id):
@@ -122,9 +112,13 @@ def delete_server(request, server_id):
     server = get_object_or_404(Server, id=server_id)
     if request.method == 'POST':
         server_name = server.name
+        
+        # Remove from Prometheus targets file
+        remove_prometheus_target(str(server.ip_address))
+        
         server.delete()
         messages.success(request, f'Server "{server_name}" has been removed.')
-        return redirect('dashboard')
+        return redirect('add_server')
     return redirect('server_detail', server_id=server_id)
 
 

@@ -254,6 +254,30 @@ def _update_prometheus_targets(ip_address, has_cadvisor=False):
         json.dump(existing_targets, f, indent=2)
 
 
+def remove_prometheus_target(ip_address):
+    """
+    Remove a server from Prometheus targets file upon deletion.
+    """
+    targets_file = PROMETHEUS_TARGETS_DIR / 'uniwatch_targets.json'
+    if not targets_file.exists():
+        return
+        
+    try:
+        with open(targets_file, 'r') as f:
+            existing_targets = json.load(f)
+            
+        # Filter out targets containing this IP address
+        filtered_targets = [
+            t for t in existing_targets
+            if not any(ip_address in target for target in t.get('targets', []))
+        ]
+        
+        with open(targets_file, 'w') as f:
+            json.dump(filtered_targets, f, indent=2)
+    except (json.JSONDecodeError, IOError):
+        pass
+
+
 def execute_remote_fix(ip_address, ssh_user, private_key_content, commands):
     """
     SSH into a server and execute fix commands.

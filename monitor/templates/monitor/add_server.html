@@ -1,115 +1,685 @@
-{% extends "monitor/base.html" %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Add Server — Uniwatch</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
-{% block title %}Add Server{% endblock %}
-{% block nav_add %}active{% endblock %}
+        :root {
+            --bg-base:        #0a0a0c;
+            --bg-card:        #111113;
+            --bg-elevated:    #0f0f12;
+            --border:         rgba(255, 255, 255, 0.06);
+            --border-accent:  rgba(255, 152, 0, 0.2);
+            --text-primary:   #eaeaea;
+            --text-secondary: #a1a1aa;
+            --text-muted:     #52525b;
+            --accent:         #ff9800;
+            --accent-dim:     rgba(255, 152, 0, 0.08);
+            --success:        #10b981;
+            --danger:         #ef4444;
+        }
 
-{% block content %}
-<div class="page-header">
-    <h1>Add New Server</h1>
-    <p>Provide your server details and SSH key. We'll automatically install monitoring agents.</p>
-</div>
+        html, body {
+            background: var(--bg-base);
+            color: var(--text-primary);
+            font-family: 'Inter', sans-serif;
+            line-height: 1.6;
+            min-height: 100vh;
+        }
 
-<div style="max-width: 640px;">
-    <div class="glass-card">
-        <h2>🖥️ Server Details</h2>
-        <form method="post" id="add-server-form">
-            {% csrf_token %}
+        /* ─── NAVBAR ─────────────────────────────── */
+        .navbar {
+            position: fixed;
+            top: 0; left: 0; right: 0;
+            height: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 2rem;
+            background: rgba(10, 10, 12, 0.95);
+            border-bottom: 1px solid var(--border);
+            z-index: 100;
+            backdrop-filter: blur(10px);
+        }
 
-            <div class="form-group">
-                <label for="id_name">Server Name</label>
-                {{ form.name }}
-                {% if form.name.errors %}
-                <div class="help-text" style="color: var(--danger);">{{ form.name.errors.0 }}</div>
+        .nav-logo {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            text-decoration: none;
+            color: var(--text-primary);
+            font-weight: 800;
+            font-size: 1.15rem;
+        }
+
+        .nav-logo-icon {
+            width: 30px; height: 30px;
+            background: linear-gradient(135deg, #ff9800, #f57c00);
+            border-radius: 8px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 0.9rem;
+        }
+
+        .nav-actions { display: flex; align-items: center; gap: 0.75rem; }
+
+        .nav-btn {
+            padding: 7px 16px;
+            border-radius: 8px;
+            font-size: 0.82rem;
+            font-weight: 600;
+            text-decoration: none;
+            transition: all 0.2s;
+            border: 1px solid var(--border);
+            color: var(--text-secondary);
+            background: transparent;
+        }
+
+        .nav-btn:hover { background: rgba(255,255,255,0.05); color: var(--text-primary); }
+        .nav-btn.active { background: rgba(255,152,0,0.1); color: var(--accent); border-color: var(--border-accent); }
+
+        /* ─── PAGE WRAPPER ────────────────────────── */
+        .page-wrapper {
+            padding-top: 60px;
+            display: grid;
+            grid-template-columns: 1fr 400px;
+            min-height: 100vh;
+        }
+
+        @media (max-width: 980px) {
+            .page-wrapper { grid-template-columns: 1fr; }
+            .info-panel { display: none; }
+        }
+
+        /* ─── LEFT FORM PANEL ─────────────────────── */
+        .form-panel {
+            padding: 4rem 4rem 4rem 5rem;
+            display: flex;
+            align-items: flex-start;
+            justify-content: center;
+        }
+
+        .form-inner { width: 100%; max-width: 520px; }
+
+        /* Eyebrow */
+        .eyebrow {
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            font-size: 0.68rem;
+            font-weight: 700;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            color: var(--accent);
+            padding: 5px 14px;
+            border-radius: 100px;
+            background: var(--accent-dim);
+            border: 1px solid rgba(255,152,0,0.18);
+            margin-bottom: 1.5rem;
+        }
+
+        .page-title {
+            font-size: 2.4rem;
+            font-weight: 800;
+            letter-spacing: -0.04em;
+            color: var(--text-primary);
+            line-height: 1.1;
+            margin-bottom: 0.85rem;
+        }
+
+        .page-subtitle {
+            font-size: 0.92rem;
+            color: var(--text-muted);
+            line-height: 1.7;
+            margin-bottom: 2.75rem;
+        }
+
+        /* ─── FORM ELEMENTS ───────────────────────── */
+        .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; }
+
+        .field-group { margin-bottom: 1.5rem; }
+
+        .field-label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.75rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.6px;
+            color: var(--text-secondary);
+            margin-bottom: 0.55rem;
+            transition: color 0.2s;
+        }
+
+        .fi {
+            width: 20px; height: 20px;
+            border-radius: 5px;
+            background: rgba(255,152,0,0.12);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 0.7rem;
+        }
+
+        .field-input {
+            width: 100%;
+            background: rgba(255,255,255,0.025);
+            border: 1px solid rgba(255,255,255,0.07);
+            border-radius: 10px;
+            padding: 12px 16px;
+            color: var(--text-primary);
+            font-family: 'Inter', sans-serif;
+            font-size: 0.88rem;
+            outline: none;
+            transition: border-color 0.2s, background 0.2s, box-shadow 0.2s;
+        }
+
+        .field-input:focus {
+            border-color: var(--accent);
+            background: rgba(255,152,0,0.03);
+            box-shadow: 0 0 0 3px rgba(255,152,0,0.1);
+        }
+
+        .field-input::placeholder { color: #3f3f46; }
+
+        textarea.field-input {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.75rem;
+            line-height: 1.7;
+            resize: vertical;
+            min-height: 140px;
+        }
+
+        .field-hint {
+            font-size: 0.73rem;
+            color: var(--text-muted);
+            margin-top: 0.45rem;
+            display: flex;
+            align-items: baseline;
+            gap: 5px;
+        }
+
+        .field-error {
+            font-size: 0.73rem;
+            color: var(--danger);
+            margin-top: 0.4rem;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        /* ─── CADVISOR TOGGLE ──────────────────────── */
+        .toggle-card {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            padding: 1.1rem 1.25rem;
+            background: rgba(255,255,255,0.02);
+            border: 1px solid rgba(255,255,255,0.07);
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.2s;
+            user-select: none;
+        }
+
+        .toggle-card:hover {
+            border-color: rgba(255,152,0,0.22);
+            background: rgba(255,152,0,0.025);
+        }
+
+        .toggle-switch {
+            width: 42px;
+            height: 24px;
+            border-radius: 12px;
+            background: rgba(255,255,255,0.08);
+            border: 1px solid rgba(255,255,255,0.12);
+            position: relative;
+            flex-shrink: 0;
+            transition: background 0.25s, border-color 0.25s;
+        }
+
+        .toggle-switch::after {
+            content: '';
+            position: absolute;
+            width: 18px; height: 18px;
+            border-radius: 50%;
+            background: white;
+            top: 2px; left: 2px;
+            transition: transform 0.25s;
+        }
+
+        .toggle-switch.on {
+            background: var(--accent);
+            border-color: var(--accent);
+        }
+
+        .toggle-switch.on::after { transform: translateX(18px); }
+
+        .toggle-text-title { font-size: 0.86rem; font-weight: 600; color: var(--text-primary); }
+        .toggle-text-sub { font-size: 0.72rem; color: var(--text-muted); margin-top: 2px; }
+
+        /* ─── SUBMIT BUTTON ───────────────────────── */
+        .submit-btn {
+            width: 100%;
+            padding: 14px 24px;
+            margin-top: 0.75rem;
+            background: linear-gradient(135deg, #ff9800, #f57c00, #ffb74d);
+            border: none;
+            border-radius: 10px;
+            color: white;
+            font-family: 'Inter', sans-serif;
+            font-size: 0.95rem;
+            font-weight: 700;
+            cursor: pointer;
+            letter-spacing: 0.2px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            transition: transform 0.2s, box-shadow 0.2s;
+            box-shadow: 0 4px 20px rgba(255,152,0,0.22);
+        }
+
+        .submit-btn:hover { transform: translateY(-2px); box-shadow: 0 8px 30px rgba(255,152,0,0.32); }
+        .submit-btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+
+        .back-link {
+            display: block;
+            text-align: center;
+            margin-top: 1.25rem;
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            text-decoration: none;
+            transition: color 0.2s;
+        }
+        .back-link:hover { color: var(--text-secondary); }
+
+        /* ─── RIGHT INFO PANEL ─────────────────────── */
+        .info-panel {
+            background: #08080a;
+            border-left: 1px solid var(--border);
+            padding: 4rem 2.25rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1.25rem;
+            position: sticky;
+            top: 60px;
+            height: calc(100vh - 60px);
+            overflow-y: auto;
+        }
+
+        .panel-eyebrow {
+            font-size: 0.65rem;
+            font-weight: 700;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            color: var(--text-muted);
+            margin-bottom: 0.25rem;
+        }
+
+        .step-card {
+            display: flex;
+            gap: 0.9rem;
+            padding: 1rem 1.1rem;
+            background: rgba(255,255,255,0.02);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            transition: all 0.2s;
+        }
+
+        .step-card:hover { border-color: var(--border-accent); background: rgba(255,152,0,0.02); }
+
+        .step-num {
+            width: 30px; height: 30px;
+            border-radius: 7px;
+            background: rgba(255,152,0,0.1);
+            border: 1px solid rgba(255,152,0,0.2);
+            display: flex; align-items: center; justify-content: center;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.68rem;
+            font-weight: 700;
+            color: var(--accent);
+            flex-shrink: 0;
+        }
+
+        .step-title { font-size: 0.82rem; font-weight: 600; color: var(--text-primary); margin-bottom: 2px; }
+        .step-desc { font-size: 0.74rem; color: var(--text-muted); line-height: 1.5; }
+
+        /* Security card */
+        .security-card {
+            padding: 1.15rem;
+            background: rgba(16,185,129,0.04);
+            border: 1px solid rgba(16,185,129,0.12);
+            border-radius: 10px;
+        }
+
+        .sec-header {
+            font-size: 0.75rem;
+            font-weight: 700;
+            color: var(--success);
+            display: flex; align-items: center; gap: 6px;
+            margin-bottom: 0.75rem;
+        }
+
+        .sec-list { list-style: none; display: flex; flex-direction: column; gap: 0.5rem; }
+
+        .sec-list li {
+            font-size: 0.74rem;
+            color: var(--text-muted);
+            display: flex; align-items: flex-start; gap: 7px;
+            line-height: 1.45;
+        }
+
+        .sec-list li::before { content: '✓'; color: var(--success); font-weight: 700; flex-shrink: 0; font-size: 0.65rem; margin-top: 2px; }
+
+        /* Terminal */
+        .terminal {
+            background: #04040a;
+            border: 1px solid rgba(255,255,255,0.05);
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        .term-bar {
+            display: flex; align-items: center; gap: 5px;
+            padding: 7px 12px;
+            background: rgba(255,255,255,0.025);
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+        }
+
+        .tdot { width: 8px; height: 8px; border-radius: 50%; }
+        .tdot.r { background: #ef4444; } .tdot.y { background: #f59e0b; } .tdot.g { background: #10b981; }
+        .term-title { font-size: 0.62rem; color: #3f3f46; margin-left: 6px; font-family: 'JetBrains Mono', monospace; }
+
+        .term-body { padding: 1rem; font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; line-height: 1.9; }
+
+        .tl { display: flex; gap: 7px; }
+        .tp { color: var(--accent); flex-shrink: 0; }
+        .tc { color: #71717a; }
+        .ts { color: var(--success); }
+        .td { color: #27272a; }
+
+        /* Messages */
+        .messages { margin-bottom: 1.5rem; display: flex; flex-direction: column; gap: 0.5rem; }
+        .msg {
+            padding: 10px 14px;
+            border-radius: 8px;
+            font-size: 0.82rem;
+            border: 1px solid;
+        }
+        .msg.success { background: rgba(16,185,129,0.08); color: var(--success); border-color: rgba(16,185,129,0.2); }
+        .msg.error { background: rgba(239,68,68,0.08); color: var(--danger); border-color: rgba(239,68,68,0.2); }
+    </style>
+</head>
+<body>
+
+    <!-- Navbar -->
+    <nav class="navbar">
+        <a href="{% url 'landing' %}" class="nav-logo">
+            <div class="nav-logo-icon">⚡</div>
+            Uniwatch
+        </a>
+        <div class="nav-actions">
+            {% if all_servers %}
+                {% for s in all_servers %}
+                <a href="{% url 'server_detail' s.id %}" class="nav-btn">{{ s.name }}</a>
+                {% endfor %}
+            {% endif %}
+            <a href="{% url 'add_server' %}" class="nav-btn active">➕ Add Server</a>
+            <a href="{% url 'admin:index' %}" class="nav-btn">⚙️ Admin</a>
+        </div>
+    </nav>
+
+    <div class="page-wrapper">
+
+        <!-- ══ LEFT FORM ══════════════════════ -->
+        <div class="form-panel">
+            <div class="form-inner">
+
+                {% if messages %}
+                <div class="messages">
+                    {% for message in messages %}
+                    <div class="msg {{ message.tags }}">{{ message }}</div>
+                    {% endfor %}
+                </div>
                 {% endif %}
-                <div class="help-text">A friendly name to identify this server.</div>
+
+                <div class="eyebrow">⚡ New Deployment</div>
+                <h1 class="page-title">Connect Your<br>Server</h1>
+                <p class="page-subtitle">
+                    Provide an IP address and SSH key. Monitoring agents deploy automatically in under 60 seconds — zero manual configuration.
+                </p>
+
+                <form method="post" id="add-server-form" novalidate>
+                    {% csrf_token %}
+
+                    <!-- Row 1: Name + SSH User -->
+                    <div class="field-row">
+                        <div class="field-group">
+                            <label class="field-label" for="{{ form.name.id_for_label }}">
+                                <span class="fi">🖥</span> Server Name
+                            </label>
+                            <input
+                                type="text"
+                                name="{{ form.name.html_name }}"
+                                id="{{ form.name.id_for_label }}"
+                                class="field-input"
+                                placeholder="prod-server-01"
+                                value="{{ form.name.value|default:'' }}"
+                            >
+                            {% if form.name.errors %}
+                            <div class="field-error">⚠ {{ form.name.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+                        <div class="field-group">
+                            <label class="field-label" for="{{ form.ssh_user.id_for_label }}">
+                                <span class="fi">👤</span> SSH User
+                            </label>
+                            <input
+                                type="text"
+                                name="{{ form.ssh_user.html_name }}"
+                                id="{{ form.ssh_user.id_for_label }}"
+                                class="field-input"
+                                placeholder="ubuntu"
+                                value="{{ form.ssh_user.value|default:'ubuntu' }}"
+                            >
+                            {% if form.ssh_user.errors %}
+                            <div class="field-error">⚠ {{ form.ssh_user.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <!-- IP Address -->
+                    <div class="field-group">
+                        <label class="field-label" for="{{ form.ip_address.id_for_label }}">
+                            <span class="fi">🌐</span> IP Address
+                        </label>
+                        <input
+                            type="text"
+                            name="{{ form.ip_address.html_name }}"
+                            id="{{ form.ip_address.id_for_label }}"
+                            class="field-input"
+                            placeholder="54.123.45.67"
+                            value="{{ form.ip_address.value|default:'' }}"
+                        >
+                        {% if form.ip_address.errors %}
+                        <div class="field-error">⚠ {{ form.ip_address.errors.0 }}</div>
+                        {% endif %}
+                        <div class="field-hint">Public IPv4 address reachable from this server over port 22</div>
+                    </div>
+
+                    <!-- SSH Private Key -->
+                    <div class="field-group">
+                        <label class="field-label" for="{{ form.ssh_private_key.id_for_label }}">
+                            <span class="fi">🔑</span> SSH Private Key
+                        </label>
+                        <textarea
+                            name="{{ form.ssh_private_key.html_name }}"
+                            id="{{ form.ssh_private_key.id_for_label }}"
+                            class="field-input"
+                            placeholder="-----BEGIN RSA PRIVATE KEY-----&#10;MIIEowIBAAKCAQEA...&#10;-----END RSA PRIVATE KEY-----"
+                            rows="6"
+                        >{{ form.ssh_private_key.value|default:'' }}</textarea>
+                        {% if form.ssh_private_key.errors %}
+                        <div class="field-error">⚠ {{ form.ssh_private_key.errors.0 }}</div>
+                        {% endif %}
+                        <div class="field-hint">🔒 Used once for agent setup, then immediately cleared. Never stored in the database.</div>
+                    </div>
+
+                    <!-- cAdvisor Toggle -->
+                    <div class="field-group">
+                        <div class="field-label"><span class="fi">🐳</span> Container Monitoring</div>
+                        <div class="toggle-card" id="toggle-card" onclick="handleToggle()">
+                            <div class="toggle-switch" id="toggle-switch"></div>
+                            <div>
+                                <div class="toggle-text-title">Install cAdvisor</div>
+                                <div class="toggle-text-sub">Enables per-container CPU &amp; memory tracking via Docker</div>
+                            </div>
+                        </div>
+                        <input
+                            type="checkbox"
+                            name="{{ form.has_containers.html_name }}"
+                            id="{{ form.has_containers.id_for_label }}"
+                            style="display:none;"
+                            {% if form.has_containers.value %}checked{% endif %}
+                        >
+                    </div>
+
+                    <!-- Submit -->
+                    <button type="submit" class="submit-btn" id="btn-submit">
+                        <span id="btn-icon">🚀</span>
+                        <span id="btn-text">Deploy Monitoring Agents</span>
+                    </button>
+
+                    <a href="{% url 'landing' %}" class="back-link">← Back to home</a>
+                </form>
             </div>
+        </div>
 
-            <div class="form-group">
-                <label for="id_ip_address">IP Address</label>
-                {{ form.ip_address }}
-                {% if form.ip_address.errors %}
-                <div class="help-text" style="color: var(--danger);">{{ form.ip_address.errors.0 }}</div>
-                {% endif %}
-                <div class="help-text">Public IP address of your server (e.g., 54.123.45.67).</div>
-            </div>
+        <!-- ══ RIGHT INFO PANEL ════════════════ -->
+        <div class="info-panel">
 
-            <div class="form-group">
-                <label for="id_ssh_user">SSH Username</label>
-                {{ form.ssh_user }}
-                {% if form.ssh_user.errors %}
-                <div class="help-text" style="color: var(--danger);">{{ form.ssh_user.errors.0 }}</div>
-                {% endif %}
-                <div class="help-text">Usually "ubuntu" for Ubuntu, "ec2-user" for Amazon Linux.</div>
-            </div>
+            <div class="panel-eyebrow">What happens next?</div>
 
-            <div class="form-group">
-                <label for="id_ssh_private_key">SSH Private Key</label>
-                {{ form.ssh_private_key }}
-                {% if form.ssh_private_key.errors %}
-                <div class="help-text" style="color: var(--danger);">{{ form.ssh_private_key.errors.0 }}</div>
-                {% endif %}
-                <div class="help-text" style="display: flex; align-items: center; gap: 6px;">
-                    🔒 <strong>Secure:</strong> Your key is used once for setup and immediately deleted. We never store it.
+            <div class="step-card">
+                <div class="step-num">01</div>
+                <div>
+                    <div class="step-title">SSH Connection</div>
+                    <div class="step-desc">Univatch connects to your server over port 22 using Paramiko with your provided private key.</div>
                 </div>
             </div>
 
-            <div class="form-group">
-                <label>Container Monitoring</label>
-                <label class="form-checkbox-wrapper" for="id_has_containers">
-                    {{ form.has_containers }}
-                    <div>
-                        <strong style="color: var(--text-primary);">🐳 Install cAdvisor</strong>
-                        <div class="help-text" style="margin-top: 2px;">
-                            Check this if your server runs Docker containers. cAdvisor will be installed to monitor container resources.
-                        </div>
-                    </div>
-                </label>
+            <div class="step-card">
+                <div class="step-num">02</div>
+                <div>
+                    <div class="step-title">Agent Deployment</div>
+                    <div class="step-desc">Node Exporter v1.7.0 is installed and started as a systemd service. cAdvisor is optionally deployed via Docker.</div>
+                </div>
             </div>
 
-            <div style="display: flex; gap: 0.75rem; margin-top: 1.5rem;">
-                <button type="submit" class="btn btn-primary" id="btn-submit-server" style="flex: 1;">
-                    🚀 Deploy Monitoring Agents
-                </button>
-                <a href="{% url 'dashboard' %}" class="btn btn-ghost" id="btn-cancel">
-                    Cancel
-                </a>
+            <div class="step-card">
+                <div class="step-num">03</div>
+                <div>
+                    <div class="step-title">Prometheus Discovery</div>
+                    <div class="step-desc">Server is registered via file-based service discovery. Prometheus begins collecting metrics within seconds.</div>
+                </div>
             </div>
-        </form>
-    </div>
 
-    <!-- Info Card -->
-    <div class="glass-card" style="border-color: rgba(255, 152, 0, 0.15);">
-        <h2>ℹ️ What happens next?</h2>
-        <div style="color: var(--text-secondary); font-size: 0.9rem; line-height: 1.8;">
-            <p>When you click <strong>"Deploy Monitoring Agents"</strong>, we will:</p>
-            <ol style="margin-top: 0.5rem; padding-left: 1.5rem;">
-                <li>Connect to your server via SSH</li>
-                <li>Install <strong>Prometheus Node Exporter</strong> (port 9100) for system metrics</li>
-                {% if form.has_containers.value %}
-                <li>Install <strong>cAdvisor</strong> (port 8080) for container metrics</li>
-                {% else %}
-                <li>Optionally install <strong>cAdvisor</strong> if you check the container monitoring box</li>
-                {% endif %}
-                <li>Register the server with our Prometheus instance</li>
-                <li><strong style="color: var(--success);">Delete your SSH key from memory</strong> — we never store it</li>
-            </ol>
-        </div>
-    </div>
-</div>
+            <div class="step-card">
+                <div class="step-num">04</div>
+                <div>
+                    <div class="step-title">Dashboard Goes Live</div>
+                    <div class="step-desc">CPU, memory, disk, network, and container metrics populate your real-time dashboard automatically.</div>
+                </div>
+            </div>
 
-{% endblock %}
+            <div class="step-card">
+                <div class="step-num">05</div>
+                <div>
+                    <div class="step-title">Alerts &amp; Self-Healing</div>
+                    <div class="step-desc">Alert thresholds go active instantly. The self-healing engine is armed and ready to remediate incidents via SSH.</div>
+                </div>
+            </div>
 
-{% block extra_js %}
-<script>
-    // Add loading state to form on submit
-    const form = document.getElementById('add-server-form');
-    const submitBtn = document.getElementById('btn-submit-server');
+            <!-- Security -->
+            <div class="security-card">
+                <div class="sec-header">🔐 Security Guarantee</div>
+                <ul class="sec-list">
+                    <li>SSH key held in memory only during setup — then garbage collected</li>
+                    <li>Keys are never written to disk or stored in the database</li>
+                    <li>All remote fix commands are whitelisted — no arbitrary execution</li>
+                    <li>Every remediation is logged with attribution and full audit trail</li>
+                </ul>
+            </div>
 
-    form.addEventListener('submit', function() {
-        submitBtn.disabled = true;
-        submitBtn.innerHTML = '<span style="animation: pulse 1s infinite;">⏳</span> Connecting & Installing... This may take 1-2 minutes';
-        submitBtn.style.opacity = '0.7';
-        submitBtn.style.cursor = 'wait';
-    });
-</script>
-{% endblock %}
+            <!-- Terminal preview -->
+            <div class="terminal">
+                <div class="term-bar">
+                    <div class="tdot r"></div>
+                    <div class="tdot y"></div>
+                    <div class="tdot g"></div>
+                    <span class="term-title">deployment.log</span>
+                </div>
+                <div class="term-body">
+                    <div class="tl"><span class="tp">$</span><span class="tc">Parsing SSH key...</span></div>
+                    <div class="tl"><span class="ts">✓ RSA 2048-bit key accepted</span></div>
+                    <div class="tl"><span class="tp">$</span><span class="tc">ssh ubuntu@54.123.45.67</span></div>
+                    <div class="tl"><span class="ts">✓ Connected successfully</span></div>
+                    <div class="tl"><span class="tp">$</span><span class="tc">Installing node_exporter v1.7.0</span></div>
+                    <div class="tl"><span class="ts">✓ Service active on :9100</span></div>
+                    <div class="tl"><span class="tp">$</span><span class="tc">Registering Prometheus target...</span></div>
+                    <div class="tl"><span class="ts">✓ Metrics streaming live</span></div>
+                    <div class="tl td"><span>&nbsp;</span></div>
+                    <div class="tl"><span class="ts" style="font-weight:700;">✓ Setup complete in 28s 🎉</span></div>
+                </div>
+            </div>
+
+        </div><!-- /info-panel -->
+    </div><!-- /page-wrapper -->
+
+    <script>
+        // ── cAdvisor toggle ──────────────────────────────────
+        const checkbox = document.getElementById('{{ form.has_containers.id_for_label }}');
+        const toggleSwitch = document.getElementById('toggle-switch');
+
+        function syncToggle() {
+            if (checkbox.checked) {
+                toggleSwitch.classList.add('on');
+            } else {
+                toggleSwitch.classList.remove('on');
+            }
+        }
+
+        function handleToggle() {
+            checkbox.checked = !checkbox.checked;
+            syncToggle();
+        }
+
+        syncToggle(); // initial state
+
+        // ── Focus label highlight ─────────────────────────────
+        document.querySelectorAll('.field-input').forEach(input => {
+            input.addEventListener('focus', () => {
+                const lbl = input.closest('.field-group')?.querySelector('.field-label');
+                if (lbl) lbl.style.color = 'var(--accent)';
+            });
+            input.addEventListener('blur', () => {
+                const lbl = input.closest('.field-group')?.querySelector('.field-label');
+                if (lbl) lbl.style.color = '';
+            });
+        });
+
+        // ── Submit loading state ──────────────────────────────
+        document.getElementById('add-server-form').addEventListener('submit', function() {
+            const btn = document.getElementById('btn-submit');
+            const icon = document.getElementById('btn-icon');
+            const text = document.getElementById('btn-text');
+            btn.disabled = true;
+            icon.textContent = '⏳';
+            text.textContent = 'Connecting & Installing... (~30s)';
+        });
+    </script>
+</body>
+</html>

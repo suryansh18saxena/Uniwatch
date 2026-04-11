@@ -3,7 +3,7 @@ from . import views
 
 urlpatterns = [
     path('', views.landing_page, name='landing'),
-    path('dashboard/', views.dashboard, name='dashboard'),
+
     path('add-server/', views.add_server, name='add_server'),
     path('server/<int:server_id>/', views.server_detail, name='server_detail'),
     path('server/<int:server_id>/api/timeseries/', views.server_timeseries_api, name='server_timeseries_api'),
