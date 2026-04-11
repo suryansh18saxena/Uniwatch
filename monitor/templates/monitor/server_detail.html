@@ -38,13 +38,47 @@
             <button type="submit" class="btn btn-ghost" style="color:var(--text-secondary); background:rgba(255,255,255,0.05); border-color:transparent;">Refresh Status</button>
         </form>
         {% endif %}
-        <form method="post" action="{% url 'delete_server' server.id %}" style="display: inline;" id="delete-form">
+        <button class="btn btn-ghost" style="color:#ef4444; background:rgba(239,68,68,0.1); border-color:transparent;"
+                id="btn-delete" onclick="openDeleteConfirm()">
+            🗑️ Delete
+        </button>
+        <form method="post" action="{% url 'delete_server' server.id %}" style="display:none;" id="delete-form">
             {% csrf_token %}
-            <button type="submit" class="btn btn-ghost" style="color:#ef4444; background:rgba(239,68,68,0.1); border-color:transparent;" id="btn-delete"
-                    onclick="return confirm('Are you sure you want to remove this server?')">
-                🗑️ Delete
-            </button>
         </form>
+
+        <!-- Confirm Delete Modal -->
+        <div id="delete-modal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0;
+             background:rgba(0,0,0,0.75); z-index:10000; backdrop-filter:blur(6px);
+             justify-content:center; align-items:center;">
+            <div style="background:#18181b; border:1px solid rgba(239,68,68,0.3); border-radius:16px;
+                        padding:2rem; max-width:420px; width:90%; text-align:center;">
+                <div style="font-size:2.5rem; margin-bottom:1rem;">🗑️</div>
+                <h3 style="color:#ef4444; font-size:1.1rem; font-weight:700; margin-bottom:0.5rem;">Delete Server?</h3>
+                <p style="color:#a1a1aa; font-size:0.85rem; margin-bottom:1.5rem; line-height:1.6;">
+                    This will remove <strong style="color:white;">{{ server.name }}</strong> from Uniwatch and stop monitoring it. This cannot be undone.
+                </p>
+                <div style="display:flex; gap:1rem; justify-content:center;">
+                    <button onclick="closeDeleteConfirm()"
+                            style="padding:10px 24px; border-radius:8px; border:1px solid rgba(255,255,255,0.1);
+                                   background:transparent; color:#a1a1aa; cursor:pointer; font-size:0.85rem;">Cancel</button>
+                    <button onclick="document.getElementById('delete-form').submit()"
+                            style="padding:10px 24px; border-radius:8px; border:none;
+                                   background:#ef4444; color:#fff; cursor:pointer; font-size:0.85rem; font-weight:700;">Yes, Delete</button>
+                </div>
+            </div>
+        </div>
+        <script>
+            function openDeleteConfirm() {
+                const m = document.getElementById('delete-modal');
+                m.style.display = 'flex';
+            }
+            function closeDeleteConfirm() {
+                document.getElementById('delete-modal').style.display = 'none';
+            }
+            document.getElementById('delete-modal').addEventListener('click', function(e) {
+                if (e.target === this) closeDeleteConfirm();
+            });
+        </script>
     </div>
 </div>
 
@@ -80,6 +114,19 @@
 <div id="loading-graphs" style="text-align: center; padding: 2rem; color: var(--text-secondary);">
     Fetching latest telemetry...
 </div>
+<div id="live-indicator" style="display:none; position:fixed; top:12px; right:20px; z-index:999;
+             background:rgba(16,185,129,0.15); border:1px solid rgba(16,185,129,0.3);
+             border-radius:20px; padding:4px 14px; font-size:0.7rem; font-weight:700;
+             color:#10b981; letter-spacing:1px; transition:opacity 0.3s; opacity:0.6;">
+    <span style="display:inline-block; width:6px; height:6px; border-radius:50%;
+                 background:#10b981; margin-right:6px; animation:livePulse 1.5s infinite;"></span>LIVE · 5s
+</div>
+<style>
+    @keyframes livePulse {
+        0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(16,185,129,0.4); }
+        50% { opacity: 0.5; box-shadow: 0 0 0 4px rgba(16,185,129,0); }
+    }
+</style>
 
 <div id="graphs-container" style="display: none;">
     
@@ -158,7 +205,7 @@
         <!-- Alerts -->
         <div>
             <div class="panel-header"><i>🚨</i> ALERTS</div>
-            <div class="solid-card" style="padding:1.5rem; min-height:150px; display:flex; flex-direction:column; gap:1rem;">
+            <div class="solid-card" id="page-alerts-container" style="padding:1.5rem; min-height:150px; display:flex; flex-direction:column; gap:1rem;">
                 {% for alert in metrics.alerts %}
                 <div style="display:flex; flex-direction:column; gap:4px; padding-bottom:1rem; border-bottom:1px solid rgba(255,255,255,0.05);">
                     <div style="display:flex; justify-content:space-between; align-items:center;">
@@ -496,21 +543,47 @@
 </div>
 {% endif %}
 
+<!-- Setup Logs (for failed servers) -->
+{% if server.setup_status == 'failed' and server.setup_logs %}
+<div style="margin-top:2rem;">
+    <div class="panel-header"><i>📋</i> SETUP LOGS</div>
+    <div style="background:#0f0f11; border:1px solid rgba(239,68,68,0.2); border-radius:12px; padding:1.25rem;
+                font-family:'JetBrains Mono',monospace; font-size:0.75rem; color:#a1a1aa;
+                max-height:340px; overflow-y:auto; line-height:1.7; white-space:pre-wrap; word-break:break-all;">
+{{ server.setup_logs }}</div>
+</div>
+{% endif %}
+
 <!-- Retry Setup (for failed servers) -->
 {% if server.setup_status == 'failed' %}
-<div class="solid-card" style="border-color: rgba(239, 68, 68, 0.2); max-width:600px; margin-top:2rem;">
+<div class="solid-card" style="border-color:rgba(239,68,68,0.2); max-width:600px; margin-top:1.5rem; padding:1.5rem;">
     <h2 style="font-size:1.2rem; color:var(--text-primary); margin-bottom:0.5rem;">🔄 Retry Setup</h2>
-    <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 1.5rem;">
-        The setup sequence failed. You can retry provisioning by providing your SSH key again.
+    <p style="color:var(--text-secondary); font-size:0.85rem; margin-bottom:1.5rem;">
+        The setup sequence failed. Provide your SSH key and adjustments below to retry.
     </p>
     <form method="post" action="{% url 'retry_setup' server.id %}" id="retry-form">
         {% csrf_token %}
-        <div class="form-group">
-            <textarea class="form-input" name="ssh_private_key" id="retry_key" rows="4"
-                      placeholder="-----BEGIN RSA PRIVATE KEY-----" required></textarea>
+        <div style="margin-bottom:1rem;">
+            <label style="font-size:0.75rem; color:var(--text-muted); font-weight:600; display:block; margin-bottom:8px;">SSH PRIVATE KEY</label>
+            <textarea class="form-input" name="ssh_private_key" id="retry_key" rows="5"
+                      placeholder="-----BEGIN RSA PRIVATE KEY-----" required
+                      style="width:100%; background:rgba(255,255,255,0.03); border:1px solid var(--border-color);
+                             border-radius:8px; padding:12px; color:var(--text-primary);
+                             font-family:'JetBrains Mono',monospace; font-size:0.75rem; resize:vertical;"></textarea>
         </div>
-        <button type="submit" class="btn btn-primary" id="btn-retry">
-            Execute Retry
+        <div style="display:flex; align-items:center; gap:10px; margin-bottom:1.5rem;
+                    background:rgba(245,158,11,0.08); border:1px solid rgba(245,158,11,0.2);
+                    border-radius:8px; padding:10px 14px;">
+            <input type="checkbox" name="has_containers" id="retry_has_containers" value="on"
+                   {% if server.has_containers %}checked{% endif %}
+                   style="width:16px; height:16px; accent-color:#f59e0b;">
+            <label for="retry_has_containers" style="font-size:0.8rem; color:#f59e0b; cursor:pointer;">
+                Install cAdvisor (requires Docker on the server)
+            </label>
+        </div>
+        <button type="submit" class="btn btn-primary" id="btn-retry"
+                style="background:#10b981; border-color:transparent;">
+            ⚡ Execute Retry
         </button>
     </form>
 </div>
@@ -580,251 +653,163 @@
             return grad;
         }
 
-        // Fetch the REAL timeseries data
-        fetch(`/server/{{ server.id }}/api/timeseries/`)
-            .then(response => response.json())
-            .then(data => {
-                document.getElementById('loading-graphs').style.display = 'none';
-                document.getElementById('graphs-container').style.display = 'block';
+        const commonOptions = {
+            responsive: true, maintainAspectRatio: false,
+            animation: { duration: 400 },
+            plugins: { legend: { display: false } },
+            scales: {
+                x: { grid: { display: false } },
+                y: { grid: { color: 'rgba(255,255,255,0.05)' }, beginAtZero: true }
+            }
+        };
 
-                function extract(arr) {
-                    if (!arr) return { labels: [], values: [] };
-                    return {
-                        labels: arr.map(pt => {
-                            const d = new Date(pt[0] * 1000);
-                            return d.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-                        }),
-                        values: arr.map(pt => pt[1])
-                    };
+        function extract(arr) {
+            if (!arr) return { labels: [], values: [] };
+            return {
+                labels: arr.map(pt => {
+                    const d = new Date(pt[0] * 1000);
+                    return d.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'});
+                }),
+                values: arr.map(pt => pt[1])
+            };
+        }
+
+        // ── Chart instance registry ──────────────────────────────
+        let charts = {};
+
+        function createChart(canvasId, type, datasets, labels, opts) {
+            const ctx = document.getElementById(canvasId);
+            if (!ctx) return null;
+            return new Chart(ctx.getContext('2d'), {
+                type: type,
+                data: { labels: labels, datasets: datasets },
+                options: opts
+            });
+        }
+
+        function updateChart(chart, labels, datasetsValues) {
+            if (!chart) return;
+            chart.data.labels = labels;
+            datasetsValues.forEach((vals, i) => {
+                if (chart.data.datasets[i]) {
+                    chart.data.datasets[i].data = vals;
                 }
+            });
+            chart.update('none'); // skip animation on refresh for smoothness
+        }
 
-                const cpu = extract(data.cpu);
-                const mem = extract(data.memory);
-                const rx = extract(data.network_rx);
-                const tx = extract(data.network_tx);
-                const disk = extract(data.disk_io);
-                const load1 = extract(data.load1);
-                const load5 = extract(data.load5);
-                const load15 = extract(data.load15);
-                const iops = extract(data.disk_iops);
-                const tcp = extract(data.tcp_conns);
+        // ── Main data loader ─────────────────────────────────────
+        let isFirstLoad = true;
 
-                const commonOptions = {
-                    responsive: true, maintainAspectRatio: false,
-                    plugins: { legend: { display: false } },
-                    scales: {
-                        x: { grid: { display: false } },
-                        y: { grid: { color: 'rgba(255,255,255,0.05)' }, beginAtZero: true }
-                    }
-                };
+        function loadChartData() {
+            fetch(`/server/{{ server.id }}/api/timeseries/`)
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('loading-graphs').style.display = 'none';
+                    document.getElementById('graphs-container').style.display = 'block';
+                    document.getElementById('live-indicator').style.display = 'block';
 
-                // CPU
-                new Chart(document.getElementById('chart-cpu').getContext('2d'), {
-                    type: 'line',
-                    data: {
-                        labels: cpu.labels,
-                        datasets: [{
+                    const cpu = extract(data.cpu);
+                    const mem = extract(data.memory);
+                    const rx = extract(data.network_rx);
+                    const tx = extract(data.network_tx);
+                    const disk = extract(data.disk_io);
+                    const load1 = extract(data.load1);
+                    const load5 = extract(data.load5);
+                    const load15 = extract(data.load15);
+                    const iops = extract(data.disk_iops);
+                    const tcp = extract(data.tcp_conns);
+
+                    if (isFirstLoad) {
+                        // ── CREATE all charts on first load ──────────
+                        charts.cpu = createChart('chart-cpu', 'line', [{
                             data: cpu.values, borderColor: '#ff9800', backgroundColor: getGradient(),
                             borderWidth: 2, tension: 0.4, fill: true, pointRadius: 0
-                        }]
-                    },
-                    options: commonOptions
-                });
+                        }], cpu.labels, commonOptions);
 
-                // Memory
-                new Chart(document.getElementById('chart-memory').getContext('2d'), {
-                    type: 'line',
-                    data: {
-                        labels: mem.labels,
-                        datasets: [{
+                        charts.memory = createChart('chart-memory', 'line', [{
                             data: mem.values, borderColor: '#d97706', backgroundColor: getGradient(),
                             borderWidth: 2, tension: 0.4, fill: true, pointRadius: 0
-                        }]
-                    },
-                    options: commonOptions
-                });
+                        }], mem.labels, commonOptions);
 
-                // Memory Doughnut
-                const curMem = {{ metrics.memory_usage|default:0 }};
-                new Chart(document.getElementById('chart-memory-doughnut').getContext('2d'), {
-                    type: 'doughnut',
-                    data: {
-                        labels: ['Used', 'Free'],
-                        datasets: [{
+                        const curMem = {{ metrics.memory_usage|default:0 }};
+                        charts.memDoughnut = createChart('chart-memory-doughnut', 'doughnut', [{
                             data: [curMem, 100 - curMem],
                             backgroundColor: ['#ff9800', 'rgba(255,255,255,0.05)'],
                             borderWidth: 0, cutout: '85%'
-                        }]
-                    },
-                    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { enabled: false } } }
-                });
+                        }], ['Used', 'Free'], {
+                            responsive: true, maintainAspectRatio: false,
+                            plugins: { legend: { display: false }, tooltip: { enabled: false } }
+                        });
 
-                // Disk Doughnut
-                const curDisk = {{ metrics.disk_usage|default:0 }};
-                new Chart(document.getElementById('chart-disk-doughnut').getContext('2d'), {
-                    type: 'doughnut',
-                    data: {
-                        labels: ['Used', 'Free'],
-                        datasets: [{
+                        const curDisk = {{ metrics.disk_usage|default:0 }};
+                        charts.diskDoughnut = createChart('chart-disk-doughnut', 'doughnut', [{
                             data: [curDisk, 100 - curDisk],
                             backgroundColor: ['#eaeaea', 'rgba(255,255,255,0.05)'],
                             borderWidth: 0, cutout: '85%'
-                        }]
-                    },
-                    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { enabled: false } } }
-                });
+                        }], ['Used', 'Free'], {
+                            responsive: true, maintainAspectRatio: false,
+                            plugins: { legend: { display: false }, tooltip: { enabled: false } }
+                        });
 
-                // Network RX/TX
-                new Chart(document.getElementById('chart-network').getContext('2d'), {
-                    type: 'line',
-                    data: {
-                        labels: rx.labels.length ? rx.labels : tx.labels,
-                        datasets: [
+                        charts.network = createChart('chart-network', 'line', [
                             { label: 'RX MB/s', data: rx.values, borderColor: '#ff9800', borderWidth: 2, tension: 0.4, pointRadius: 0 },
                             { label: 'TX MB/s', data: tx.values, borderColor: '#3b82f6', borderWidth: 2, tension: 0.4, pointRadius: 0 }
-                        ]
-                    },
-                    options: {
-                        ...commonOptions,
-                        plugins: { legend: { display: true, labels: { color: '#a1a1aa' } } }
-                    }
-                });
+                        ], rx.labels.length ? rx.labels : tx.labels, {
+                            ...commonOptions,
+                            plugins: { legend: { display: true, labels: { color: '#a1a1aa' } } }
+                        });
 
-                // Disk IO
-                new Chart(document.getElementById('chart-disk').getContext('2d'), {
-                    type: 'bar',
-                    data: {
-                        labels: disk.labels,
-                        datasets: [{
+                        charts.disk = createChart('chart-disk', 'bar', [{
                             data: disk.values, backgroundColor: '#ff9800', borderRadius: 2
-                        }]
-                    },
-                    options: commonOptions
-                });
+                        }], disk.labels, commonOptions);
 
-                // Load Averages
-                new Chart(document.getElementById('chart-load').getContext('2d'), {
-                    type: 'line',
-                    data: {
-                        labels: load1.labels.length ? load1.labels : load5.labels,
-                        datasets: [
+                        charts.load = createChart('chart-load', 'line', [
                             { label: '1m', data: load1.values, borderColor: '#ff9800', borderWidth: 2, tension: 0.4, pointRadius: 0 },
                             { label: '5m', data: load5.values, borderColor: '#fcd34d', borderWidth: 2, tension: 0.4, pointRadius: 0 },
                             { label: '15m', data: load15.values, borderColor: '#f87171', borderWidth: 2, tension: 0.4, pointRadius: 0 }
-                        ]
-                    },
-                    options: {
-                        ...commonOptions,
-                        plugins: { legend: { display: true, labels: { color: '#a1a1aa' } } },
-                        scales: { x: { grid: { display: false } }, y: { grid: { color: 'rgba(255,255,255,0.05)' } } } // no beginAtZero required for load
-                    }
-                });
-                
-                // IOPS
-                new Chart(document.getElementById('chart-iops').getContext('2d'), {
-                    type: 'line',
-                    data: {
-                        labels: iops.labels,
-                        datasets: [{
+                        ], load1.labels.length ? load1.labels : load5.labels, {
+                            ...commonOptions,
+                            plugins: { legend: { display: true, labels: { color: '#a1a1aa' } } },
+                            scales: { x: { grid: { display: false } }, y: { grid: { color: 'rgba(255,255,255,0.05)' } } }
+                        });
+
+                        charts.iops = createChart('chart-iops', 'line', [{
                             label: 'IOPS', data: iops.values, borderColor: '#d97706', backgroundColor: getGradient(),
                             borderWidth: 2, tension: 0.4, fill: true, pointRadius: 0
-                        }]
-                    },
-                    options: commonOptions
-                });
+                        }], iops.labels, commonOptions);
 
-                // TCP Connections
-                new Chart(document.getElementById('chart-tcp').getContext('2d'), {
-                    type: 'line',
-                    data: {
-                        labels: tcp.labels,
-                        datasets: [{
+                        charts.tcp = createChart('chart-tcp', 'line', [{
                             label: 'TCP Connections', data: tcp.values, borderColor: '#3b82f6', backgroundColor: getGradient(),
                             borderWidth: 2, tension: 0.4, fill: true, pointRadius: 0
-                        }]
-                    },
-                    options: commonOptions
-                });
-                
-                // === DYNAMIC MOCK DATA INJECTION FOR EXTRAS ===
-                const existingGraphIds = ['widget_cpu', 'widget_load', 'widget_mem_hist', 'widget_mem_dist', 'widget_disk_io', 'widget_iops', 'widget_disk_usage', 'widget_net', 'widget_tcp'];
-                
-                // Fetch the backend registry so we know what needs generating
-                fetch(`/server/{{ server.id }}/api/dashboard/`)
-                    .then(r => r.json())
-                    .then(cfg => {
-                        // Generate HTML for any missing registry widgets into their correct mapped categories
-                        cfg.registry.forEach(item => {
-                            if (!existingGraphIds.includes(item.id)) {
-                                // Find target container logic
-                                // Depending on category, append it to the grid container
-                                // Existing DOM elements: #acc-perf > .graph-grid-acc, #acc-mem > .graph-grid-acc, etc.
-                                // For old ones, we can just grab querySelector(`#${item.cat} .graph-grid-acc`)
-                                // For new ones like acc-os, we explicitly made a dynamic ID `#dynamic-acc-os`
-                                let container = document.getElementById(`dynamic-${item.cat}`);
-                                if (!container) {
-                                    container = document.querySelector(`#${item.cat} .graph-grid-acc`);
-                                }
-                                
-                                if (container) {
-                                    let newHTML = `
-                                    <div id="${item.id}" class="solid-card widget-card" style="padding:1.5rem; display:none;">
-                                        <h4 style="margin-bottom:1rem;color:var(--text-muted);font-size:0.8rem;text-transform:uppercase;letter-spacing:1px;">${item.label}</h4>
-                                        <div style="height:220px; width:100%;"><canvas id="chart-${item.id}"></canvas></div>
-                                    </div>`;
-                                    container.insertAdjacentHTML('beforeend', newHTML);
-                                }
-                            }
-                        });
-                        
-                        // Now bind mocked Chart objects to them
-                        cfg.registry.forEach(item => {
-                            if (!existingGraphIds.includes(item.id)) {
-                                const canvas = document.getElementById(`chart-${item.id}`);
-                                if (!canvas) return;
-                                
-                                let mockLabels = [];
-                                let mockValues = [];
-                                let now = new Date();
-                                for(let i=0; i<30; i++) {
-                                    let dt = new Date(now.getTime() - (30-i)*60000);
-                                    mockLabels.push(dt.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}));
-                                    mockValues.push(Math.floor(Math.random() * (90 - 10 + 1)) + 10); // Random 10-90
-                                }
-                                
-                                new Chart(canvas.getContext('2d'), {
-                                    type: 'line',
-                                    data: {
-                                        labels: mockLabels,
-                                        datasets: [{
-                                            data: mockValues, borderColor: '#a78bfa', backgroundColor: getGradient(),
-                                            borderWidth: 2, tension: 0.4, fill: true, pointRadius: 0
-                                        }]
-                                    },
-                                    options: commonOptions
-                                });
-                            }
-                        });
-                        
-                        // Finally update Dash logic with the selected states retrieved from backend
-                        if (typeof dashRegistry !== 'undefined') {
-                            dashRegistry = cfg.registry;
-                            currentSelection = cfg.selected_graphs;
-                        }
-                        
-                        if (typeof updateDashboardVisibility === 'function') {
-                            updateDashboardVisibility(cfg.selected_graphs, cfg.is_customized);
-                        }
-                    });
+                        }], tcp.labels, commonOptions);
 
-            })
-            .catch(err => {
-                if (isFirstLoad) {
-                    document.getElementById('loading-graphs').innerHTML = `❌ Failed to load graph data: ${err}`;
-                }
-                console.error('Chart refresh error:', err);
-            });
-        } // Close loadChartData()
+                        isFirstLoad = false;
+                    } else {
+                        // ── UPDATE existing charts in-place ──────────
+                        updateChart(charts.cpu, cpu.labels, [cpu.values]);
+                        updateChart(charts.memory, mem.labels, [mem.values]);
+                        updateChart(charts.network, rx.labels.length ? rx.labels : tx.labels, [rx.values, tx.values]);
+                        updateChart(charts.disk, disk.labels, [disk.values]);
+                        updateChart(charts.load, load1.labels.length ? load1.labels : load5.labels, [load1.values, load5.values, load15.values]);
+                        updateChart(charts.iops, iops.labels, [iops.values]);
+                        updateChart(charts.tcp, tcp.labels, [tcp.values]);
+                    }
+
+                    // Update the live indicator pulse
+                    const indicator = document.getElementById('live-indicator');
+                    if (indicator) {
+                        indicator.style.opacity = '1';
+                        setTimeout(() => { indicator.style.opacity = '0.6'; }, 300);
+                    }
+                })
+                .catch(err => {
+                    if (isFirstLoad) {
+                        document.getElementById('loading-graphs').innerHTML = `❌ Failed to load graph data: ${err}`;
+                    }
+                    console.error('Chart refresh error:', err);
+                });
+        }
 
         // ── Initial load ─────────────────────────────────────────
         loadChartData();
@@ -846,6 +831,7 @@
 
                 let html = '';
                 alerts.forEach((alert, index) => {
+                    // Fix button uses JS template literal
                     const safeTitle = alert.title.replace(/'/g, "\\'");
                     
                     html += `

@@ -10,13 +10,17 @@ Security:
   - Each command has a 30-second timeout
   - Every attempt is logged to the database regardless of outcome
   - Failed commands can optionally stop the chain or continue
+  - Network attack auto-fix is restricted to safe (diagnostic) commands
+    to prevent accidental lockout of legitimate users
+  - A 5-minute cooldown prevents repeated auto-fix rule stacking
 """
 
 import paramiko
 import io
 import json
+import time
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from .fix_actions import get_fix_actions, _is_command_safe
 
@@ -26,10 +30,36 @@ logger = logging.getLogger(__name__)
 COMMAND_TIMEOUT = 30
 # Maximum retries per failed command
 MAX_RETRIES = 1
+# Cooldown window (seconds) for network auto-fix to avoid rule stacking
+NETWORK_AUTOFIX_COOLDOWN = 300  # 5 minutes
+# Delay (seconds) before executing iptables commands — circuit-breaker window
+IPTABLES_DELAY = 3
+
+
+def _check_network_cooldown(ip_address):
+    """
+    Check if a network_attack auto-fix was executed recently.
+    Returns True if still within cooldown window (should skip).
+    """
+    try:
+        from .models import FixExecution
+        from django.utils import timezone
+        cutoff = timezone.now() - timedelta(seconds=NETWORK_AUTOFIX_COOLDOWN)
+        recent = FixExecution.objects.filter(
+            server__ip_address=ip_address,
+            metric_name='network_attack',
+            triggered_by='auto',
+            created_at__gte=cutoff,
+        ).exists()
+        return recent
+    except Exception:
+        # If we can't check, err on the side of caution
+        return True
 
 
 def execute_fix(ip_address, ssh_user, private_key_content, metric_name,
-                stop_on_failure=False, action_indices=None):
+                stop_on_failure=False, action_indices=None,
+                triggered_by='manual'):
     """
     Execute whitelisted fix actions for a given metric on a remote server.
 
@@ -37,9 +67,11 @@ def execute_fix(ip_address, ssh_user, private_key_content, metric_name,
         ip_address:          Target server IP
         ssh_user:            SSH username
         private_key_content: Raw SSH private key (used once, not stored)
-        metric_name:         One of 'cpu_usage', 'memory_usage', 'disk_usage'
+        metric_name:         One of 'cpu_usage', 'memory_usage', 'disk_usage',
+                             'network', 'network_attack'
         stop_on_failure:     If True, abort remaining commands after first failure
         action_indices:      Optional list of action indices to run (if None, run all)
+        triggered_by:        'manual' or 'auto' — controls safety restrictions
 
     Returns:
         dict: {
@@ -58,6 +90,26 @@ def execute_fix(ip_address, ssh_user, private_key_content, metric_name,
             'summary': str,
         }
     """
+    is_auto = (triggered_by == 'auto')
+    is_network_metric = (metric_name == 'network_attack')
+
+    # ── Network auto-fix cooldown ───────────────────────────────────
+    if is_auto and is_network_metric:
+        if _check_network_cooldown(ip_address):
+            logger.info(
+                f"Skipping network_attack auto-fix on {ip_address}: "
+                f"cooldown ({NETWORK_AUTOFIX_COOLDOWN}s) is still active."
+            )
+            return {
+                'overall_status': 'skipped',
+                'results': [],
+                'summary': (
+                    f'Network auto-fix skipped — a fix was applied within '
+                    f'the last {NETWORK_AUTOFIX_COOLDOWN // 60} minutes. '
+                    f'Use manual execution to override.'
+                ),
+            }
+
     actions = get_fix_actions(metric_name)
     if not actions:
         return {
@@ -65,6 +117,10 @@ def execute_fix(ip_address, ssh_user, private_key_content, metric_name,
             'results': [],
             'summary': f'No fix actions defined for metric: {metric_name}',
         }
+
+    # Auto-fix execution will run all actions (safe and moderate) for proactive mitigation.
+    if is_auto and is_network_metric:
+        logger.info(f"Network auto-fix on {ip_address}: executing full mitigation suite (including iptables rules).")
 
     # Filter to specific actions if indices provided
     if action_indices is not None:
@@ -107,6 +163,14 @@ def execute_fix(ip_address, ssh_user, private_key_content, metric_name,
                 if stop_on_failure:
                     break
                 continue
+
+            # Pre-execution delay for iptables commands (circuit-breaker window)
+            if 'iptables' in cmd and is_network_metric:
+                logger.info(
+                    f"Applying {IPTABLES_DELAY}s safety delay before iptables "
+                    f"command on {ip_address}: {action['label']}"
+                )
+                time.sleep(IPTABLES_DELAY)
 
             # Execute with retry logic
             attempt = 0

@@ -600,6 +600,87 @@
         .metric-card.critical .metric-value { color: var(--danger); }
 
         /* ========== TOAST NOTIFICATIONS ========== */
+        #uw-toast-container {
+            position: fixed;
+            top: 76px;
+            right: 1.5rem;
+            z-index: 9998;
+            display: flex;
+            flex-direction: column;
+            gap: 0.6rem;
+            pointer-events: none;
+        }
+        .uw-toast {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            padding: 14px 18px;
+            border-radius: 12px;
+            font-size: 0.82rem;
+            font-weight: 500;
+            max-width: 360px;
+            pointer-events: all;
+            cursor: pointer;
+            animation: uwToastIn 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+            border: 1px solid;
+            backdrop-filter: blur(20px);
+            box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+            line-height: 1.5;
+        }
+        .uw-toast.uw-critical {
+            background: rgba(239,68,68,0.12);
+            border-color: rgba(239,68,68,0.35);
+            color: #fca5a5;
+        }
+        .uw-toast.uw-warning {
+            background: rgba(245,158,11,0.10);
+            border-color: rgba(245,158,11,0.30);
+            color: #fcd34d;
+        }
+        .uw-toast.uw-info {
+            background: rgba(59,130,246,0.10);
+            border-color: rgba(59,130,246,0.3);
+            color: #93c5fd;
+        }
+        .uw-toast.uw-success {
+            background: rgba(16,185,129,0.10);
+            border-color: rgba(16,185,129,0.3);
+            color: #6ee7b7;
+        }
+        .uw-toast-icon { font-size: 1.3rem; flex-shrink: 0; margin-top: 1px; }
+        .uw-toast-body { flex: 1; }
+        .uw-toast-title { font-weight: 700; font-size: 0.85rem; margin-bottom: 2px; }
+        .uw-toast-sub { font-size: 0.75rem; opacity: 0.8; }
+        .uw-toast-close { opacity: 0.5; font-size: 1.1rem; cursor: pointer; flex-shrink: 0; line-height: 1; }
+        .uw-toast-close:hover { opacity: 1; }
+        .uw-toast.uw-out {
+            animation: uwToastOut 0.3s ease-in forwards;
+        }
+        @keyframes uwToastIn {
+            from { opacity: 0; transform: translateX(40px) scale(0.9); }
+            to   { opacity: 1; transform: translateX(0)   scale(1); }
+        }
+        @keyframes uwToastOut {
+            from { opacity: 1; transform: translateX(0); }
+            to   { opacity: 0; transform: translateX(40px); }
+        }
+        /* Alert bell badge */
+        #uw-alert-bell { position: relative; cursor: pointer; }
+        #uw-alert-count {
+            position: absolute; top: -4px; right: -6px;
+            background: #ef4444; color: white;
+            font-size: 0.6rem; font-weight: 800;
+            border-radius: 50%; min-width: 16px; height: 16px;
+            display: none; align-items: center; justify-content: center;
+            padding: 0 3px; line-height: 1;
+            animation: bellPop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+        @keyframes bellPop {
+            from { transform: scale(0); }
+            to   { transform: scale(1); }
+        }
+
+        /* Legacy toast compat */
         .toast-container {
             position: fixed;
             top: 80px;
@@ -609,7 +690,6 @@
             flex-direction: column;
             gap: 0.5rem;
         }
-
         .toast {
             padding: 12px 20px;
             border-radius: var(--radius-sm);
@@ -620,19 +700,16 @@
             border: 1px solid;
             max-width: 400px;
         }
-
         .toast-success {
             background: var(--success-bg);
             color: var(--success);
             border-color: rgba(16, 185, 129, 0.3);
         }
-
         .toast-error {
             background: var(--danger-bg);
             color: var(--danger);
             border-color: rgba(239, 68, 68, 0.3);
         }
-
         @keyframes toastIn {
             from { opacity: 0; transform: translateX(20px); }
             to { opacity: 1; transform: translateX(0); }
@@ -747,6 +824,11 @@
             Uniwatch
         </a>
         <div class="navbar-nav">
+            <!-- Alert Bell -->
+            <div id="uw-alert-bell" class="nav-link" title="Live Alerts" onclick="toggleAlertDrawer()">
+                🔔
+                <span id="uw-alert-count"></span>
+            </div>
             <a href="{% url 'add_server' %}" class="nav-link {% block nav_add %}{% endblock %}" id="nav-add-server">
                 ➕ Add Server
             </a>
@@ -756,7 +838,7 @@
         </div>
     </nav>
 
-    <!-- Toast Messages -->
+    <!-- Django flash toasts (server-side messages) -->
     {% if messages %}
     <div class="toast-container" id="toast-container">
         {% for message in messages %}
@@ -766,6 +848,28 @@
         {% endfor %}
     </div>
     {% endif %}
+
+    <!-- Live Alert Toast Container (JS-driven, works without refresh) -->
+    <div id="uw-toast-container"></div>
+
+    <!-- Alert Drawer (slide-in panel showing current alerts) -->
+    <div id="uw-drawer" style="display:none; position:fixed; top:64px; right:0; bottom:0; width:340px;
+         background:#111113; border-left:1px solid rgba(255,255,255,0.07); z-index:9997;
+         overflow-y:auto; padding:1.25rem; animation:drawerIn 0.3s ease;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+            <span style="font-weight:700; font-size:0.9rem; color:#eaeaea;">🔔 Live Alerts</span>
+            <button onclick="toggleAlertDrawer()" style="background:none; border:none; color:#71717a; font-size:1.3rem; cursor:pointer;">×</button>
+        </div>
+        <div id="uw-drawer-content" style="font-size:0.82rem; color:#a1a1aa;">
+            Checking for alerts...
+        </div>
+    </div>
+    <style>
+    @keyframes drawerIn {
+        from { transform: translateX(100%); }
+        to   { transform: translateX(0); }
+    }
+    </style>
 
     <!-- Main Layout -->
     <div class="app-layout">
@@ -834,8 +938,7 @@
     </div>
 
     <script>
-
-        // Auto-dismiss toasts after 5 seconds
+        // ── Auto-dismiss django flash toasts ────────────────────────
         document.querySelectorAll('.toast').forEach((toast, i) => {
             setTimeout(() => {
                 toast.style.opacity = '0';
@@ -844,6 +947,192 @@
                 setTimeout(() => toast.remove(), 300);
             }, 5000 + i * 500);
         });
+
+        // ── Global Real-Time Alert Notification System ──────────────
+        (function() {
+            // Collect all monitored server IDs from sidebar
+            const serverIds = Array.from(
+                document.querySelectorAll('a.server-item[href*="/server/"]')
+            ).map(a => {
+                const m = a.href.match(/\/server\/(\d+)/);
+                return m ? parseInt(m[1]) : null;
+            }).filter(Boolean);
+
+            if (!serverIds.length) return; // no servers, no polling
+
+            // Track which alert keys we've already notified about
+            const notifiedAlerts = new Set();
+            let drawerOpen = false;
+            let latestAlertsByServer = {};
+            let totalAlertCount = 0;
+
+            // Request browser notification permission early
+            if ('Notification' in window && Notification.permission === 'default') {
+                Notification.requestPermission();
+            }
+
+            // ── Show an in-page toast ─────────────────────────────
+            function showToast(severity, title, message, serverName) {
+                const container = document.getElementById('uw-toast-container');
+                const typeMap = {
+                    critical: { cls: 'uw-critical', icon: '🚨' },
+                    warning:  { cls: 'uw-warning',  icon: '⚠️' },
+                    info:     { cls: 'uw-info',     icon: 'ℹ️' },
+                    success:  { cls: 'uw-success',  icon: '✅' },
+                };
+                const t = typeMap[severity] || typeMap.warning;
+
+                const el = document.createElement('div');
+                el.className = `uw-toast ${t.cls}`;
+                el.innerHTML = `
+                    <span class="uw-toast-icon">${t.icon}</span>
+                    <div class="uw-toast-body">
+                        <div class="uw-toast-title">${title}</div>
+                        <div class="uw-toast-sub">${serverName} · ${message}</div>
+                    </div>
+                    <span class="uw-toast-close" onclick="this.closest('.uw-toast').remove()">×</span>
+                `;
+                container.appendChild(el);
+
+                // Auto-remove after 8s
+                setTimeout(() => {
+                    el.classList.add('uw-out');
+                    setTimeout(() => el.remove(), 350);
+                }, 8000);
+            }
+
+            // ── Browser push notification ─────────────────────────
+            function pushBrowserNotif(severity, title, message, serverName) {
+                if (!('Notification' in window) || Notification.permission !== 'granted') return;
+                new Notification(`${severity === 'critical' ? '🚨' : '⚠️'} ${title}`, {
+                    body: `${serverName}: ${message}`,
+                    icon: '/static/favicon.ico',
+                    tag: title + serverName, // prevents duplicate OS notifications
+                });
+            }
+
+            // ── Update the alert bell badge ───────────────────────
+            function updateBell(count) {
+                const badge = document.getElementById('uw-alert-count');
+                if (!badge) return;
+                if (count > 0) {
+                    badge.textContent = count > 9 ? '9+' : count;
+                    badge.style.display = 'flex';
+                    if (count !== totalAlertCount) {
+                        // Re-trigger pop animation
+                        badge.style.animation = 'none';
+                        badge.offsetHeight; // force reflow
+                        badge.style.animation = 'bellPop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)';
+                    }
+                } else {
+                    badge.style.display = 'none';
+                }
+                totalAlertCount = count;
+            }
+
+            // ── Update the alert drawer content ──────────────────
+            function renderDrawer() {
+                const content = document.getElementById('uw-drawer-content');
+                if (!content) return;
+                let allAlerts = [];
+                Object.entries(latestAlertsByServer).forEach(([serverId, data]) => {
+                    (data.alerts || []).forEach(a => {
+                        allAlerts.push({ ...a, serverName: data.server });
+                    });
+                });
+                if (!allAlerts.length) {
+                    content.innerHTML = '<div style="text-align:center; padding:2rem 0; color:#52525b;">✅ No active alerts<br><small>All systems operating normally</small></div>';
+                    return;
+                }
+                content.innerHTML = allAlerts.map(a => {
+                    const color = a.severity === 'critical' ? '#ef4444' : '#f59e0b';
+                    const bg    = a.severity === 'critical' ? 'rgba(239,68,68,0.08)' : 'rgba(245,158,11,0.08)';
+                    return `
+                        <div style="border-radius:10px; background:${bg}; border:1px solid ${color}30;
+                                    padding:12px 14px; margin-bottom:10px;">
+                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                                <span style="color:${color}; font-weight:700; font-size:0.85rem;">${a.title}</span>
+                                <span style="font-size:0.65rem; color:#52525b; background:rgba(255,255,255,0.04); padding:2px 7px; border-radius:4px;">${a.severity.toUpperCase()}</span>
+                            </div>
+                            <div style="font-size:0.75rem; color:#a1a1aa; margin-bottom:6px;">${a.message}</div>
+                            <div style="font-size:0.7rem; color:#52525b;">${a.serverName} · ${a.time}</div>
+                        </div>
+                    `;
+                }).join('');
+            }
+
+            // ── Poll one server for alerts ────────────────────────
+            function pollServer(serverId) {
+                fetch(`/server/${serverId}/api/alerts/`)
+                    .then(r => r.json())
+                    .then(data => {
+                        latestAlertsByServer[serverId] = data;
+                        let newCount = 0;
+                        Object.values(latestAlertsByServer).forEach(d => {
+                            newCount += (d.alerts || []).length;
+                        });
+                        updateBell(newCount);
+                        renderDrawer();
+
+                        // Notify only for NEW alerts (not seen before)
+                        (data.alerts || []).forEach(alert => {
+                            const key = `${serverId}:${alert.metric_name}:${alert.title}`;
+                            if (!notifiedAlerts.has(key)) {
+                                notifiedAlerts.add(key);
+                                showToast(alert.severity, alert.title, alert.message, data.server);
+                                pushBrowserNotif(alert.severity, alert.title, alert.message, data.server);
+                            }
+                        });
+
+                        // Clear resolved alerts from notified set so they can re-fire if they return
+                        const currentKeys = new Set(
+                            (data.alerts || []).map(a => `${serverId}:${a.metric_name}:${a.title}`)
+                        );
+                        notifiedAlerts.forEach(k => {
+                            if (k.startsWith(`${serverId}:`) && !currentKeys.has(k)) {
+                                notifiedAlerts.delete(k);
+                            }
+                        });
+
+                        // Dispatch event for other pages
+                        document.dispatchEvent(new CustomEvent('uw-alerts-updated', {
+                            detail: {
+                                serverId: serverId,
+                                serverName: data.server,
+                                alerts: data.alerts || []
+                            }
+                        }));
+                    })
+                    .catch(() => {}); // silent fail — server may be temporarily unreachable
+            }
+
+            // ── Main polling loop ─────────────────────────────────
+            function pollAll() {
+                serverIds.forEach(pollServer);
+            }
+
+            // Start immediately, then every 10 seconds
+            pollAll();
+            setInterval(pollAll, 10000);
+
+            // ── Alert drawer toggle ───────────────────────────────
+            window.toggleAlertDrawer = function() {
+                const drawer = document.getElementById('uw-drawer');
+                drawerOpen = !drawerOpen;
+                drawer.style.display = drawerOpen ? 'block' : 'none';
+                if (drawerOpen) renderDrawer();
+            };
+
+            // Close drawer on outside click
+            document.addEventListener('click', function(e) {
+                const drawer = document.getElementById('uw-drawer');
+                const bell = document.getElementById('uw-alert-bell');
+                if (drawerOpen && !drawer.contains(e.target) && !bell.contains(e.target)) {
+                    drawerOpen = false;
+                    drawer.style.display = 'none';
+                }
+            });
+        })();
     </script>
     {% block extra_js %}{% endblock %}
 </body>

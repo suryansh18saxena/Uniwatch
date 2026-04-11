@@ -107,6 +107,28 @@ def server_timeseries_api(request, server_id):
         return JsonResponse({'error': str(e)}, status=500)
 
 
+def api_live_alerts(request, server_id):
+    """
+    GET: Return live alert list for a server, evaluated against Prometheus right now.
+    Lightweight — polls every 10s from the frontend for real-time alert notifications.
+    """
+    server = get_object_or_404(Server, id=server_id)
+    if not server.is_active:
+        return JsonResponse({'alerts': [], 'server': server.name})
+
+    try:
+        metrics = get_server_metrics(server.ip_address)
+        alerts = metrics.get('alerts', [])
+    except Exception:
+        alerts = []
+
+    return JsonResponse({
+        'server_id': server.id,
+        'server': server.name,
+        'alerts': alerts,
+    })
+
+
 def delete_server(request, server_id):
     """Delete a server from monitoring."""
     server = get_object_or_404(Server, id=server_id)
@@ -131,6 +153,8 @@ def retry_setup(request, server_id):
             messages.error(request, 'Please provide your SSH private key to retry.')
             return redirect('server_detail', server_id=server.id)
 
+        # Allow toggling cAdvisor on retry
+        server.has_containers = request.POST.get('has_containers') == 'on'
         server.setup_status = 'running'
         server.save()
 
