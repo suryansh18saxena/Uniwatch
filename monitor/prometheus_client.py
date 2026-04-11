@@ -143,7 +143,17 @@ def get_server_metrics(ip_address):
             metrics['network_tx_mbps'] = round(total_tx / 1048576, 2)
         except (IndexError, KeyError, ValueError):
             metrics['network_tx_mbps'] = 0
-            
+
+    # TCP Established Connections (real-time count)
+    tcp_estab = query_prometheus(
+        f'node_netstat_Tcp_CurrEstab{{instance="{instance}"}}'
+    )
+    if tcp_estab:
+        try:
+            metrics['tcp_established'] = int(float(tcp_estab[0]['value'][1]))
+        except (IndexError, KeyError, ValueError):
+            metrics['tcp_established'] = None
+
     # Containers
     cadvisor_instance = f'{ip_address}:8080'
     containers = []
@@ -181,7 +191,17 @@ def get_server_metrics(ip_address):
     # Check Network
     if metrics.get('network_rx_mbps') is not None and metrics['network_rx_mbps'] > 100:
         alerts.append({'severity': 'warning', 'title': 'High Network I/O', 'message': f"Ingest rate is {metrics['network_rx_mbps']} MB/s", 'time': 'Recent', 'metric_name': 'network'})
-        
+
+    # Check for Network Attack (anomalous connection count)
+    if metrics.get('tcp_established') is not None and metrics['tcp_established'] > 500:
+        alerts.append({
+            'severity': 'critical',
+            'title': 'Possible Network Attack',
+            'message': f"{metrics['tcp_established']} active TCP connections detected — potential DDoS or SYN flood",
+            'time': 'Just now',
+            'metric_name': 'network_attack',
+        })
+
     metrics['alerts'] = alerts
 
     return metrics
@@ -194,7 +214,10 @@ def get_server_timeseries(ip_address, duration_minutes=30):
     instance = f'{ip_address}:9100'
     end_time = int(time.time())
     start_time = end_time - (duration_minutes * 60)
-    
+
+    # Dense 5-second step to match Prometheus scrape_interval
+    step = '5s'
+
     timeseries = {
         'cpu': [], 'load1': [], 'load5': [], 'load15': [],
         'memory': [],
@@ -211,26 +234,26 @@ def get_server_timeseries(ip_address, duration_minutes=30):
     # 1. CPU Usage
     cpu = query_prometheus_range(
         f'100 - (avg(rate(node_cpu_seconds_total{{instance="{instance}",mode="idle"}}[1m])) * 100)',
-        start=start_time, end=end_time, step='60s'
+        start=start_time, end=end_time, step=step
     )
     timeseries['cpu'] = parse_result(cpu)
 
     # 2. Memory Usage %
     mem = query_prometheus_range(
         f'(1 - (node_memory_MemAvailable_bytes{{instance="{instance}"}} / node_memory_MemTotal_bytes{{instance="{instance}"}})) * 100',
-        start=start_time, end=end_time, step='60s'
+        start=start_time, end=end_time, step=step
     )
     timeseries['memory'] = parse_result(mem)
 
     # 3. Network RX MB/s
     net_rx = query_prometheus_range(
         f'rate(node_network_receive_bytes_total{{instance="{instance}",device!="lo"}}[1m]) / 1048576',
-        start=start_time, end=end_time, step='60s'
+        start=start_time, end=end_time, step=step
     )
     # 4. Network TX MB/s
     net_tx = query_prometheus_range(
         f'rate(node_network_transmit_bytes_total{{instance="{instance}",device!="lo"}}[1m]) / 1048576',
-        start=start_time, end=end_time, step='60s'
+        start=start_time, end=end_time, step=step
     )
     
     # Sum over all adapters if there are multiple datasets in result
@@ -252,19 +275,19 @@ def get_server_timeseries(ip_address, duration_minutes=30):
     # 5. Disk Read/Write (bytes/sec) - Sum of Reads + Writes combined as an anomaly load proxy
     disk_io = query_prometheus_range(
         f'(rate(node_disk_read_bytes_total{{instance="{instance}"}}[1m]) + rate(node_disk_written_bytes_total{{instance="{instance}"}}[1m])) / 1048576',
-        start=start_time, end=end_time, step='60s'
+        start=start_time, end=end_time, step=step
     )
     timeseries['disk_io'] = sum_multiple_results(disk_io)
 
     # System Load Averages
-    timeseries['load1'] = parse_result(query_prometheus_range(f'node_load1{{instance="{instance}"}}', start=start_time, end=end_time, step='60s'))
-    timeseries['load5'] = parse_result(query_prometheus_range(f'node_load5{{instance="{instance}"}}', start=start_time, end=end_time, step='60s'))
-    timeseries['load15'] = parse_result(query_prometheus_range(f'node_load15{{instance="{instance}"}}', start=start_time, end=end_time, step='60s'))
+    timeseries['load1'] = parse_result(query_prometheus_range(f'node_load1{{instance="{instance}"}}', start=start_time, end=end_time, step=step))
+    timeseries['load5'] = parse_result(query_prometheus_range(f'node_load5{{instance="{instance}"}}', start=start_time, end=end_time, step=step))
+    timeseries['load15'] = parse_result(query_prometheus_range(f'node_load15{{instance="{instance}"}}', start=start_time, end=end_time, step=step))
 
     # Disk IOPS (Reads + Writes)
     disk_iops = query_prometheus_range(
         f'rate(node_disk_reads_completed_total{{instance="{instance}"}}[1m]) + rate(node_disk_writes_completed_total{{instance="{instance}"}}[1m])',
-        start=start_time, end=end_time, step='60s'
+        start=start_time, end=end_time, step=step
     )
     timeseries['disk_iops'] = sum_multiple_results(disk_iops)
 

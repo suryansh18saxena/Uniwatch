@@ -104,6 +104,25 @@ def _get_cadvisor_commands():
     ]
 
 
+def _get_security_hardening_commands():
+    """Commands to apply baseline security rules (like DDoS connection limits)."""
+    return [
+        # Ensure iptables is available (works on Debian/Ubuntu/CentOS/RHEL)
+        "sudo apt-get update -y && sudo apt-get install iptables -y || sudo yum install iptables -y || true",
+        
+        # 1. Limit concurrent HTTP (80) connections per IP to 50
+        "sudo iptables -A INPUT -p tcp --syn --dport 80 -m connlimit --connlimit-above 50 -j REJECT --reject-with tcp-reset || true",
+        
+        # 2. Limit concurrent HTTPS (443) connections per IP to 50
+        "sudo iptables -A INPUT -p tcp --syn --dport 443 -m connlimit --connlimit-above 50 -j REJECT --reject-with tcp-reset || true",
+        
+        # 3. Kernel hardening: Enable SYN Flood protection via sysctl
+        "sudo sysctl -w net.ipv4.tcp_syncookies=1 || true",
+        "sudo sysctl -w net.ipv4.tcp_max_syn_backlog=2048 || true",
+        "sudo sysctl -w net.ipv4.tcp_synack_retries=2 || true"
+    ]
+
+
 def setup_server(ip_address, ssh_user, private_key_content, install_cadvisor=False):
     """
     Connect to a remote server via SSH and install monitoring agents.
@@ -178,6 +197,21 @@ def setup_server(ip_address, ssh_user, private_key_content, install_cadvisor=Fal
                     return False, logs
 
             logs += "\n🎉 cAdvisor installed and running on port 8080!\n\n"
+
+        # Apply Baseline Security Hardening
+        logs += "🛡️  Applying baseline anti-DDoS security rules...\n"
+        logs += "-" * 40 + "\n"
+        for cmd in _get_security_hardening_commands():
+            stdin, stdout, stderr = ssh.exec_command(cmd, timeout=60)
+            exit_status = stdout.channel.recv_exit_status()
+            
+            cmd_display = cmd.split("||")[0].strip()[:80] + "..." if len(cmd) > 80 else cmd.split("||")[0].strip()
+            if exit_status == 0:
+                logs += f"   ✅ {cmd_display}\n"
+            else:
+                logs += f"   ⚠️ Skipped: {cmd_display} (OS may not support this)\n"
+
+        logs += "\n🚀 Server hardened against basic flood attacks!\n\n"
 
         # Update Prometheus targets for auto-discovery
         _update_prometheus_targets(ip_address, install_cadvisor)
