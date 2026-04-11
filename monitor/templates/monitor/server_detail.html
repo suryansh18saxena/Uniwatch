@@ -819,8 +819,60 @@
 
             })
             .catch(err => {
-                document.getElementById('loading-graphs').innerHTML = `❌ Failed to load graph data: ${err}`;
+                if (isFirstLoad) {
+                    document.getElementById('loading-graphs').innerHTML = `❌ Failed to load graph data: ${err}`;
+                }
+                console.error('Chart refresh error:', err);
             });
+        } // Close loadChartData()
+
+        // ── Initial load ─────────────────────────────────────────
+        loadChartData();
+
+        // ── Auto-refresh every 5 seconds ─────────────────────────
+        setInterval(loadChartData, 5000);
+
+        // ── Auto-update Alerts Panel ─────────────────────────────
+        document.addEventListener('uw-alerts-updated', function(e) {
+            if (e.detail.serverId === {{ server.id }}) {
+                const container = document.getElementById('page-alerts-container');
+                if (!container) return;
+                
+                const alerts = e.detail.alerts;
+                if (!alerts || alerts.length === 0) {
+                    container.innerHTML = '<div style="color:var(--text-muted); font-size:0.85rem; text-align:center; margin:auto;">No active incident alerts. System operating normally.</div>';
+                    return;
+                }
+
+                let html = '';
+                alerts.forEach((alert, index) => {
+                    const safeTitle = alert.title.replace(/'/g, "\\'");
+                    
+                    html += `
+                    <div style="display:flex; flex-direction:column; gap:4px; padding-bottom:1rem; border-bottom:1px solid rgba(255,255,255,0.05);">
+                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                            <span style="color:#ef4444; font-weight:600; font-size:0.9rem;">${alert.title}</span>
+                            <span style="background:rgba(239,68,68,0.1); color:#ef4444; font-size:0.65rem; padding:2px 6px; border-radius:4px;">{{ server.name|escapejs }}</span>
+                        </div>
+                        <span style="color:var(--text-muted); font-size:0.8rem;">${alert.message}</span>
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-top:6px;">
+                            <span style="color:var(--text-muted); font-size:0.75rem;">${alert.time}</span>
+                            <button onclick="openFixModal('${alert.metric_name}', '${safeTitle}')"
+                                    style="background:rgba(16,185,129,0.15); color:#10b981; border:1px solid rgba(16,185,129,0.3);
+                                           padding:4px 12px; border-radius:6px; font-size:0.7rem; font-weight:700;
+                                           cursor:pointer; letter-spacing:0.5px; transition: all 0.2s;"
+                                    onmouseover="this.style.background='rgba(16,185,129,0.3)'"
+                                    onmouseout="this.style.background='rgba(16,185,129,0.15)'"
+                                    id="fix-btn-dynamic-${index}">
+                                🔧 FIX NOW
+                            </button>
+                        </div>
+                    </div>
+                    `;
+                });
+                container.innerHTML = html;
+            }
+        });
 
         {% endif %}
     });
