@@ -307,3 +307,146 @@ def api_toggle_autofix(request, server_id):
         'server': server.name,
         'auto_fix_enabled': server.auto_fix_enabled,
     })
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Custom Dashboard Selection API
+# ──────────────────────────────────────────────────────────────────────
+
+GRAPH_REGISTRY = [
+    # Category 1: System Performance (CPU & Load)
+    { "id": "widget_cpu", "label": "CPU Usage (%)", "cat": "acc-perf" },
+    { "id": "widget_load", "label": "System Load Averages", "cat": "acc-perf" },
+    { "id": "widget_cpu_iowait", "label": "CPU I/O Wait Time", "cat": "acc-perf" },
+    { "id": "widget_cpu_steal", "label": "CPU Steal Time", "cat": "acc-perf" },
+    { "id": "widget_cpu_interrupts", "label": "Hardware Interrupts/sec", "cat": "acc-perf" },
+    { "id": "widget_cpu_ctx", "label": "Context Switches/sec", "cat": "acc-perf" },
+    { "id": "widget_cpu_user", "label": "CPU User Time", "cat": "acc-perf" },
+    { "id": "widget_cpu_system", "label": "CPU System Time", "cat": "acc-perf" },
+    { "id": "widget_cpu_softirq", "label": "CPU SoftIRQ", "cat": "acc-perf" },
+    { "id": "widget_cpu_core_imbalance", "label": "CPU Core Imbalance Ratio", "cat": "acc-perf" },
+    
+    # Category 2: Memory Utilization
+    { "id": "widget_mem_hist", "label": "Memory Allocation History", "cat": "acc-mem" },
+    { "id": "widget_mem_dist", "label": "Current Memory Distribution", "cat": "acc-mem" },
+    { "id": "widget_mem_swap", "label": "Swap Space Utilization", "cat": "acc-mem" },
+    { "id": "widget_mem_pagefaults", "label": "Page Faults/sec (Major vs Minor)", "cat": "acc-mem" },
+    { "id": "widget_mem_buffers", "label": "Buffer Allocation", "cat": "acc-mem" },
+    { "id": "widget_mem_cached", "label": "Cache Allocation", "cat": "acc-mem" },
+    { "id": "widget_mem_active", "label": "Active Memory (LRU)", "cat": "acc-mem" },
+    { "id": "widget_mem_inactive", "label": "Inactive Memory (LRU)", "cat": "acc-mem" },
+    { "id": "widget_mem_slab", "label": "Slab Allocation (Kernel)", "cat": "acc-mem" },
+    { "id": "widget_mem_oom", "label": "OOM Kill Events", "cat": "acc-mem" },
+    
+    # Category 3: Storage & Disk I/O
+    { "id": "widget_disk_io", "label": "Disk I/O Aggregated", "cat": "acc-disk" },
+    { "id": "widget_iops", "label": "Disk IOPS", "cat": "acc-disk" },
+    { "id": "widget_disk_usage", "label": "Disk Usage Distribution", "cat": "acc-disk" },
+    { "id": "widget_disk_read_lat", "label": "Disk Read Latency (ms)", "cat": "acc-disk" },
+    { "id": "widget_disk_write_lat", "label": "Disk Write Latency (ms)", "cat": "acc-disk" },
+    { "id": "widget_disk_queue", "label": "Average Disk Queue Depth", "cat": "acc-disk" },
+    { "id": "widget_disk_inode", "label": "Inode Depletion (%)", "cat": "acc-disk" },
+    { "id": "widget_disk_space_pred", "label": "Storage Exhaustion Prediction", "cat": "acc-disk" },
+    { "id": "widget_disk_merge", "label": "Merged I/O Requests/sec", "cat": "acc-disk" },
+    { "id": "widget_disk_io_time", "label": "Time Spent Doing I/O (ms)", "cat": "acc-disk" },
+    
+    # Category 4: Network Activity
+    { "id": "widget_net", "label": "Network Bandwidth", "cat": "acc-net" },
+    { "id": "widget_tcp", "label": "Active TCP Connections", "cat": "acc-net" },
+    { "id": "widget_net_drops", "label": "Packet Drops (RX/TX)", "cat": "acc-net" },
+    { "id": "widget_net_errors", "label": "Interface Errors (RX/TX)", "cat": "acc-net" },
+    { "id": "widget_net_tcp_retrans", "label": "TCP Retransmission Rate", "cat": "acc-net" },
+    { "id": "widget_net_tcp_timewait", "label": "TCP TIME_WAIT Sockets", "cat": "acc-net" },
+    { "id": "widget_net_udp", "label": "UDP Datagrams/sec", "cat": "acc-net" },
+    { "id": "widget_net_icmp", "label": "ICMP Ping Latency", "cat": "acc-net" },
+    { "id": "widget_net_dns", "label": "DNS Resolution Times", "cat": "acc-net" },
+    { "id": "widget_net_syn", "label": "TCP SYN Backlog Depth", "cat": "acc-net" },
+    
+    # Category 5: Kernel & OS
+    { "id": "widget_os_uptime", "label": "System Uptime Tracking", "cat": "acc-os" },
+    { "id": "widget_os_fds", "label": "Open File Descriptors", "cat": "acc-os" },
+    { "id": "widget_os_procs", "label": "Total Active Processes", "cat": "acc-os" },
+    { "id": "widget_os_threads", "label": "Total System Threads", "cat": "acc-os" },
+    { "id": "widget_os_zombies", "label": "Zombie Processes", "cat": "acc-os" },
+    { "id": "widget_os_forks", "label": "Process Fork Rate/sec", "cat": "acc-os" },
+    { "id": "widget_os_entropy", "label": "Available Entropy Pool", "cat": "acc-os" },
+    { "id": "widget_os_sys_calls", "label": "System Calls/sec", "cat": "acc-os" },
+    
+    # Category 6: Container Ecosystem 
+    { "id": "widget_cnt_total", "label": "Total Containers (Running/Stopped)", "cat": "acc-cnt" },
+    { "id": "widget_cnt_cpu_throttle", "label": "Container CPU Throttling", "cat": "acc-cnt" },
+    { "id": "widget_cnt_mem_fail", "label": "Container Memory Failures", "cat": "acc-cnt" },
+    { "id": "widget_cnt_net", "label": "Container Network Isolation", "cat": "acc-cnt" },
+    { "id": "widget_cnt_disk", "label": "Container Image Storage (Overlay2)", "cat": "acc-cnt" },
+    { "id": "widget_cnt_restart", "label": "Docker Daemon Restart Rate", "cat": "acc-cnt" }
+]
+DEFAULT_GRAPHS = ["widget_cpu", "widget_load", "widget_mem_hist", "widget_disk_io", "widget_net"]
+
+def api_dashboard_config(request, server_id):
+    """
+    GET: Returns the graph registry and current dashboard selection.
+    POST: Updates the dashboard selection.
+    """
+    from .models import DashboardConfig
+    import json
+    
+    server = get_object_or_404(Server, id=server_id)
+    config, created = DashboardConfig.objects.get_or_create(server=server)
+
+    if request.method == 'GET':
+        selected = config.selected_graphs if config.is_customized else DEFAULT_GRAPHS
+        return JsonResponse({
+            'registry': GRAPH_REGISTRY,
+            'selected_graphs': selected,
+            'is_customized': config.is_customized
+        })
+
+    elif request.method == 'POST':
+        try:
+            body = json.loads(request.body)
+            selected = body.get('selected_graphs', [])
+        except json.JSONDecodeError:
+            return JsonResponse({'error': 'Invalid JSON body'}, status=400)
+        
+        # Enforce at least 1 graph (fallback to default)
+        if not selected or len(selected) == 0:
+            selected = DEFAULT_GRAPHS
+            
+        # Circuit breaker: Soft limit max 12
+        selected = selected[:12]
+
+        config.selected_graphs = selected
+        config.is_customized = True
+        config.save()
+
+        return JsonResponse({
+            'success': True,
+            'selected_graphs': config.selected_graphs,
+            'is_customized': True
+        })
+    
+    return JsonResponse({'error': 'Method not allowed'}, status=405)
+
+
+def api_dashboard_reset(request, server_id):
+    """
+    POST: Resets the dashboard selection to default.
+    """
+    from .models import DashboardConfig
+    
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST required'}, status=405)
+    
+    server = get_object_or_404(Server, id=server_id)
+    config, created = DashboardConfig.objects.get_or_create(server=server)
+    
+    config.is_customized = False
+    config.selected_graphs = []
+    config.save()
+    
+    return JsonResponse({
+        'success': True, 
+        'selected_graphs': DEFAULT_GRAPHS,
+        'is_customized': False
+    })
+

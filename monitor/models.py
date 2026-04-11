@@ -129,3 +129,15 @@ class FixExecution(models.Model):
             return json.loads(self.commands_run)
         except (json.JSONDecodeError, TypeError):
             return []
+
+
+class DashboardConfig(models.Model):
+    """
+    Stores custom dashboard configuration per server.
+    """
+    server = models.OneToOneField(Server, on_delete=models.CASCADE, related_name='dashboard_config')
+    selected_graphs = models.JSONField(default=list, blank=True)
+    is_customized = models.BooleanField(default=False)
+
+    def __str__(self):
+        return f"Dashboard Config for {self.server.name}"

@@ -1,9 +1,11 @@
+{% load static %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Uniwatch | Smart Server Monitoring for Developers</title>
+    <link rel="icon" type="image/jpeg" href="{% static 'monitor/images/logo.jpg' %}">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
     <style>
         :root {
@@ -219,7 +221,7 @@
     <nav id="navbar">
         <div class="container nav-inner">
             <a href="#" class="logo">
-                <span class="logo-icon">⚡</span> Uniwatch
+                <img src="{% static 'monitor/images/logo.jpg' %}" alt="Logo" style="width: 28px; height: 28px; border-radius: 50%; object-fit: cover;"> Uniwatch
             </a>
             <div class="nav-links">
                 <a href="#features">Features</a>
@@ -249,34 +251,8 @@
                         <div class="dot red"></div><div class="dot yellow"></div><div class="dot green"></div>
                         <div style="margin-left:1rem; font-size:0.75rem; color:var(--text-muted); font-family:'JetBrains Mono';">uniwatch.app/dashboard</div>
                     </div>
-                    <div class="preview-body">
-                        <!-- Simulated layout mirroring our actual dashboard structure -->
-                        <div style="display:flex; justify-content:space-between; margin-bottom:1rem; border-bottom:1px solid rgba(255,255,255,0.05); padding-bottom:1rem;">
-                            <div style="font-size:1.5rem; font-weight:700;">PROD-SERVER-01</div>
-                            <div style="color:var(--neon-green); font-size:0.85rem; padding:4px 12px; background:rgba(16,185,129,0.1); border-radius:20px;">● Healthy</div>
-                        </div>
-                        <div class="wireframe-grid">
-                            <div style="display: flex; flex-direction: column; gap: 1rem;">
-                                <div style="display: flex; gap: 1rem; height: 100px;">
-                                    <div class="wireframe-box" style="flex:1; display:flex; flex-direction:column; justify-content:center; padding:1rem;">
-                                        <div style="font-size:0.7rem; color:#9ca3af;">CPU USAGE</div>
-                                        <div style="font-size:1.8rem; font-weight:700;">42%</div>
-                                    </div>
-                                    <div class="wireframe-box" style="flex:1; display:flex; flex-direction:column; justify-content:center; padding:1rem;">
-                                        <div style="font-size:0.7rem; color:#9ca3af;">MEMORY</div>
-                                        <div style="font-size:1.8rem; font-weight:700;">68%</div>
-                                    </div>
-                                </div>
-                                <div class="wireframe-box" style="flex:1; background: linear-gradient(to top, rgba(0,210,255,0.1), transparent); border-bottom: 2px solid var(--neon-blue);"></div>
-                            </div>
-                            <div style="display: flex; flex-direction: column; gap: 1rem;">
-                                <div class="wireframe-box" style="flex:1; padding:1rem;">
-                                    <div style="font-size:0.7rem; color:#9ca3af; margin-bottom:0.5rem;">ALERTS</div>
-                                    <div style="font-size:0.75rem; color:#ef4444; margin-bottom:4px;">⚠️ High IOPS Detected</div>
-                                    <div style="font-size:0.75rem; color:#f59e0b;">⚠️ Database container memory leak</div>
-                                </div>
-                            </div>
-                        </div>
+                    <div class="preview-body" style="padding: 0; overflow: hidden;">
+                        <img src="{% static 'monitor/images/demo_screenshot.png' %}" alt="Dashboard Demo Screenshot" style="width: 100%; height: 100%; object-fit: cover; object-position: left top;">
                     </div>
                 </div>
             </div>
@@ -482,7 +458,7 @@
     <footer>
         <div class="container">
             <div class="footer-logo">
-                <span class="logo-icon">⚡</span> Uniwatch
+                <img src="{% static 'monitor/images/logo.jpg' %}" alt="Logo" style="width: 24px; height: 24px; border-radius: 50%; object-fit: cover;"> Uniwatch
             </div>
             <div class="footer-links">
                 <a href="#">Documentation</a>

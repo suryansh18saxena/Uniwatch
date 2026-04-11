@@ -6,7 +6,10 @@
 <!-- Detail Header -->
 <div class="detail-header" style="margin-bottom: 2rem;">
     <div class="server-info">
-        <h1 id="server-name" style="font-size: 2.2rem; background:none; -webkit-text-fill-color: var(--text-primary);">{{ server.name|upper }}</h1>
+        <div style="display: flex; align-items: center; gap: 1rem;">
+            <h1 id="server-name" style="font-size: 2.2rem; margin: 0; background:none; -webkit-text-fill-color: var(--text-primary);">{{ server.name|upper }}</h1>
+            <span id="custom-view-badge" style="display:none; border-radius:20px; padding:2px 10px; font-size:0.75rem; font-weight:700; background:rgba(167,139,250,0.15); color:#a78bfa; border:1px solid rgba(167,139,250,0.3); letter-spacing:0.5px;">✨ CUSTOM VIEW</span>
+        </div>
         <div style="display: flex; align-items: center; gap: 1rem; margin-top: 0.5rem;">
             <span class="server-ip-large" id="server-ip" style="color: var(--text-primary); font-size: 1.1rem; font-family: 'Inter', sans-serif;">{{ server.ip_address }}</span>
             <span style="border-radius:20px; padding:2px 10px; font-size:0.8rem; font-weight:600; display:flex; align-items:center; gap:6px;
@@ -22,7 +25,10 @@
             </span>
         </div>
     </div>
-    <div class="detail-actions">
+    <div class="detail-actions" style="display:flex; align-items:center;">
+        <button onclick="openDashboardModal()" class="btn btn-ghost" style="color:#a78bfa; background:rgba(167,139,250,0.1); border-color:transparent; display:flex; align-items:center; gap:6px; margin-right: 0.5rem;">
+            ⚙️ Customize Dashboard
+        </button>
         <a href="#" class="btn btn-ghost" style="color:var(--text-secondary);">← SSH</a>
         {% if server.setup_status == 'failed' %}
         <a href="#retry-form" class="btn btn-ghost" style="color:var(--text-secondary); background:rgba(255,255,255,0.05); border-color:transparent;">Retry Setup</a>
@@ -383,11 +389,11 @@
     </button>
     <div id="acc-perf" class="accordion-content">
         <div class="graph-grid-acc">
-            <div class="solid-card" style="padding:1.5rem;">
+            <div id="widget_cpu" class="solid-card widget-card" style="padding:1.5rem;">
                 <h4 style="margin-bottom:1rem;color:var(--text-muted);font-size:0.8rem;text-transform:uppercase;letter-spacing:1px;">CPU Usage (%)</h4>
                 <div style="height:220px; width:100%;"><canvas id="chart-cpu"></canvas></div>
             </div>
-            <div class="solid-card" style="padding:1.5rem;">
+            <div id="widget_load" class="solid-card widget-card" style="padding:1.5rem;">
                 <h4 style="margin-bottom:1rem;color:var(--text-muted);font-size:0.8rem;text-transform:uppercase;letter-spacing:1px;">System Load Averages</h4>
                 <div style="height:220px; width:100%;"><canvas id="chart-load"></canvas></div>
             </div>
@@ -403,11 +409,11 @@
     </button>
     <div id="acc-mem" class="accordion-content">
         <div class="graph-grid-acc">
-            <div class="solid-card" style="padding:1.5rem;">
+            <div id="widget_mem_hist" class="solid-card widget-card" style="padding:1.5rem;">
                 <h4 style="margin-bottom:1rem;color:var(--text-muted);font-size:0.8rem;text-transform:uppercase;letter-spacing:1px;">Memory Allocation History</h4>
                 <div style="height:220px; width:100%;"><canvas id="chart-memory"></canvas></div>
             </div>
-            <div class="solid-card" style="padding:1.5rem; display:flex; flex-direction:column;">
+            <div id="widget_mem_dist" class="solid-card widget-card" style="padding:1.5rem; display:flex; flex-direction:column;">
                 <h4 style="margin-bottom:1rem;color:var(--text-muted);font-size:0.8rem;text-transform:uppercase;letter-spacing:1px;">Current Distribution</h4>
                 <div style="flex:1; display:flex; justify-content:center; align-items:center; position:relative; min-height:180px;">
                     <div style="position:relative; width:160px; height:160px;">
@@ -431,15 +437,15 @@
     </button>
     <div id="acc-disk" class="accordion-content">
         <div class="graph-grid-acc" style="grid-template-columns: 1fr 1fr 1fr;">
-            <div class="solid-card" style="padding:1.5rem;">
+            <div id="widget_disk_io" class="solid-card widget-card" style="padding:1.5rem;">
                 <h4 style="margin-bottom:1rem;color:var(--text-muted);font-size:0.8rem;text-transform:uppercase;letter-spacing:1px;">Disk I/O Aggregated</h4>
                 <div style="height:220px; width:100%;"><canvas id="chart-disk"></canvas></div>
             </div>
-            <div class="solid-card" style="padding:1.5rem;">
+            <div id="widget_iops" class="solid-card widget-card" style="padding:1.5rem;">
                 <h4 style="margin-bottom:1rem;color:var(--text-muted);font-size:0.8rem;text-transform:uppercase;letter-spacing:1px;">Disk IOPS</h4>
                 <div style="height:220px; width:100%;"><canvas id="chart-iops"></canvas></div>
             </div>
-            <div class="solid-card" style="padding:1.5rem; display:flex; flex-direction:column;">
+            <div id="widget_disk_usage" class="solid-card widget-card" style="padding:1.5rem; display:flex; flex-direction:column;">
                 <h4 style="margin-bottom:1rem;color:var(--text-muted);font-size:0.8rem;text-transform:uppercase;letter-spacing:1px;">Disk Usage</h4>
                 <div style="flex:1; display:flex; justify-content:center; align-items:center; position:relative; min-height:180px;">
                     <div style="position:relative; width:160px; height:160px;">
@@ -463,14 +469,38 @@
     </button>
     <div id="acc-net" class="accordion-content">
         <div class="graph-grid-acc">
-            <div class="solid-card" style="padding:1.5rem;">
+            <div id="widget_net" class="solid-card widget-card" style="padding:1.5rem;">
                 <h4 style="margin-bottom:1rem;color:var(--text-muted);font-size:0.8rem;text-transform:uppercase;letter-spacing:1px;">Network Bandwidth</h4>
                 <div style="height:220px; width:100%;"><canvas id="chart-network"></canvas></div>
             </div>
-            <div class="solid-card" style="padding:1.5rem;">
+            <div id="widget_tcp" class="solid-card widget-card" style="padding:1.5rem;">
                 <h4 style="margin-bottom:1rem;color:var(--text-muted);font-size:0.8rem;text-transform:uppercase;letter-spacing:1px;">Active TCP Connections</h4>
                 <div style="height:220px; width:100%;"><canvas id="chart-tcp"></canvas></div>
             </div>
+        </div>
+    </div>
+
+    <button class="accordion-btn" onclick="toggleAcc('acc-os', this)">
+        <div style="display:flex; align-items:center; gap:12px;">
+            <span style="font-size:1.2rem;">🖥️</span> Kernel & OS
+        </div>
+        <span class="acc-toggle-icon">+</span>
+    </button>
+    <div id="acc-os" class="accordion-content">
+        <div class="graph-grid-acc" id="dynamic-acc-os">
+            <!-- Dynamically injected OS widgets -->
+        </div>
+    </div>
+
+    <button class="accordion-btn" onclick="toggleAcc('acc-cnt', this)">
+        <div style="display:flex; align-items:center; gap:12px;">
+            <span style="font-size:1.2rem;">🐳</span> Container Ecosystem
+        </div>
+        <span class="acc-toggle-icon">+</span>
+    </button>
+    <div id="acc-cnt" class="accordion-content">
+        <div class="graph-grid-acc" id="dynamic-acc-cnt">
+            <!-- Dynamically injected Container widgets -->
         </div>
     </div>
 
@@ -558,6 +588,52 @@
     </form>
 </div>
 {% endif %}
+
+<!-- Dashboard Customization Modal -->
+<div id="dash-modal-overlay" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0;
+                                    background:rgba(0,0,0,0.7); z-index:9999; backdrop-filter:blur(4px);
+                                    justify-content:center; align-items:center;">
+    <div style="background:var(--bg-card); border:1px solid var(--border-color); border-radius:16px;
+                max-width:600px; width:90%; padding:2rem; max-height:85vh; display:flex; flex-direction:column;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.5rem;">
+            <h3 style="font-size:1.2rem; font-weight:700; color:var(--text-primary);">⚙️ Customize Dashboard</h3>
+            <button onclick="closeDashboardModal()" style="background:none; border:none; color:var(--text-muted);
+                    font-size:1.5rem; cursor:pointer; line-height:1;">×</button>
+        </div>
+
+        <p style="color:var(--text-secondary); font-size:0.85rem; margin-bottom:1rem; line-height:1.4;">
+            Select up to 12 metric panels to pin to your active dashboard view.
+        </p>
+
+        <!-- Search & Select All -->
+        <div style="display:flex; gap:10px; margin-bottom:1rem; align-items:center;">
+            <input type="text" id="dash-search" placeholder="Search graphs..." oninput="debounceDashSearch()"
+                   style="flex:1; background:rgba(255,255,255,0.03); border:1px solid var(--border-color); border-radius:8px; padding:10px; color:var(--text-primary); font-size:0.85rem;">
+            <button onclick="dashSelectAll()" style="background:rgba(255,255,255,0.05); border:1px solid var(--border-color); border-radius:8px; padding:10px 14px; color:var(--text-secondary); font-size:0.8rem; cursor:pointer;">Select All (Filtered)</button>
+        </div>
+
+        <!-- Graph Options List -->
+        <div id="dash-options-container" style="flex:1; overflow-y:auto; border:1px solid var(--border-color); border-radius:8px; background:rgba(0,0,0,0.2); padding:1rem; display:flex; flex-direction:column; gap:0.5rem; margin-bottom:1.5rem;">
+            <div style="text-align:center; color:var(--text-muted); font-size:0.85rem; margin-top:2rem;">Loading configuration...</div>
+        </div>
+
+        <!-- Limits and Badges -->
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.5rem; font-size:0.75rem; color:var(--text-muted);">
+            <span id="dash-limit-text">0 selected (Max 12)</span>
+            <span id="dash-error-text" style="color:#ef4444; display:none;">Please select at least one graph.</span>
+        </div>
+
+        <!-- Actions -->
+        <div style="display:flex; justify-content:space-between;">
+            <button onclick="dashResetDefault()" style="padding:10px 16px; border-radius:8px; border:1px solid transparent; background:rgba(239,68,68,0.1); color:#ef4444; cursor:pointer; font-size:0.85rem; font-weight:600;">Reset to Default</button>
+            <div style="display:flex; gap:10px;">
+                <button onclick="closeDashboardModal()" style="padding:10px 16px; border-radius:8px; border:1px solid var(--border-color); background:transparent; color:var(--text-secondary); cursor:pointer; font-size:0.85rem;">Cancel</button>
+                <button onclick="dashSave()" id="btn-dash-save" style="padding:10px 24px; border-radius:8px; border:none; background:#a78bfa; color:#fff; cursor:pointer; font-size:0.85rem; font-weight:700; letter-spacing:0.5px;">Save View</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 {% endblock %}
 
 {% block extra_js %}
@@ -988,5 +1064,237 @@
 
     // Load fix history on page load
     document.addEventListener('DOMContentLoaded', loadFixHistory);
+</script>
+
+<!-- ─── CUSTOM DASHBOARD MODAL & LOGIC ────────────────────────────────────── -->
+<script>
+    let dashRegistry = [];
+    let currentSelection = [];
+    let searchTimeout = null;
+
+    function fetchDashConfig() {
+        return fetch(`/server/${SERVER_ID}/api/dashboard/`)
+            .then(r => r.json())
+            .then(data => {
+                dashRegistry = data.registry;
+                currentSelection = data.selected_graphs;
+                updateDashboardVisibility(currentSelection, data.is_customized);
+            })
+            .catch(err => console.error("Failed to load dash config", err));
+    }
+
+    function openDashboardModal() {
+        document.getElementById('dash-modal-overlay').style.display = 'flex';
+        renderDashOptions(dashRegistry, currentSelection);
+        document.getElementById('dash-search').value = '';
+        updateLimitText(currentSelection.length);
+        document.getElementById('dash-error-text').style.display = 'none';
+        document.getElementById('btn-dash-save').disabled = false;
+        document.getElementById('btn-dash-save').textContent = 'Save View';
+    }
+
+    function closeDashboardModal() {
+        document.getElementById('dash-modal-overlay').style.display = 'none';
+    }
+
+    const catLabels = {
+        'acc-perf': '⚡ System Performance',
+        'acc-mem': '🧠 Memory Utilization',
+        'acc-disk': '💾 Storage & Disk I/O',
+        'acc-net': '🌐 Network Activity',
+        'acc-os': '🖥️ Kernel & OS',
+        'acc-cnt': '🐳 Container Ecosystem'
+    };
+
+    function renderDashOptions(registry, selectedIds, filter = '') {
+        const container = document.getElementById('dash-options-container');
+        filter = filter.toLowerCase();
+        
+        const filtered = registry.filter(r => r.label.toLowerCase().includes(filter));
+        
+        if (filtered.length === 0) {
+            container.innerHTML = `<div style="text-align:center; color:var(--text-muted); font-size:0.85rem; padding:1rem;">No graphs match search.</div>`;
+            return;
+        }
+
+        const groups = {};
+        filtered.forEach(r => {
+            const cat = r.cat || 'acc-perf';
+            if (!groups[cat]) groups[cat] = [];
+            groups[cat].push(r);
+        });
+
+        let html = '';
+        Object.keys(catLabels).forEach(cat => {
+            if (groups[cat] && groups[cat].length > 0) {
+                html += `<div style="font-size:0.75rem; color:var(--text-muted); margin-top:1rem; margin-bottom:0.5rem; border-bottom:1px solid rgba(255,255,255,0.05); padding-bottom:4px; text-transform:uppercase; letter-spacing:1px; font-weight:700;">${catLabels[cat]}</div>`;
+                html += groups[cat].map(r => {
+                    const isChecked = selectedIds.includes(r.id);
+                    return `
+                        <label style="display:flex; align-items:center; gap:10px; padding:10px 12px; background:rgba(255,255,255,0.02); border:1px solid var(--border-color); border-radius:8px; cursor:pointer; margin-bottom:6px; transition:all 0.2s;" class="dash-checkbox-label" data-id="${r.id}">
+                            <input type="checkbox" value="${r.id}" class="dash-checkbox" onchange="dashCheckboxChanged(event)" ${isChecked ? 'checked' : ''} style="accent-color:#a78bfa; width:16px; height:16px;">
+                            <span style="font-size:0.85rem; color:var(--text-primary); flex:1;">${r.label}</span>
+                        </label>
+                    `;
+                }).join('');
+            }
+        });
+        container.innerHTML = html;
+    }
+
+    function debounceDashSearch() {
+        clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(() => {
+            const term = document.getElementById('dash-search').value;
+            // Update current selection array from UI before re-render
+            currentSelection = Array.from(document.querySelectorAll('.dash-checkbox:checked')).map(cb => cb.value);
+            renderDashOptions(dashRegistry, currentSelection, term);
+        }, 300);
+    }
+
+    function dashCheckboxChanged(event) {
+        const checkboxes = document.querySelectorAll('.dash-checkbox:checked');
+        let selectedCount = checkboxes.length;
+        
+        if (selectedCount > 12) {
+            // Revert last check if over limit
+            if(event && event.target) event.target.checked = false;
+            selectedCount--;
+            alert("Circuit Breaker limit: Maximum 12 graphs can be selected.");
+        }
+        
+        updateLimitText(selectedCount);
+    }
+
+    function updateLimitText(count) {
+        document.getElementById('dash-limit-text').textContent = `${count} selected (Max 12)`;
+        if (count === 0) {
+            document.getElementById('dash-error-text').style.display = 'block';
+        } else {
+            document.getElementById('dash-error-text').style.display = 'none';
+        }
+        currentSelection = Array.from(document.querySelectorAll('.dash-checkbox:checked')).map(cb => cb.value);
+    }
+
+    function dashSelectAll() {
+        const checkboxes = document.querySelectorAll('.dash-checkbox');
+        let checkedCount = currentSelection.length;
+        
+        checkboxes.forEach(cb => {
+            // Check visible ones only if not checked
+            if (!cb.checked && checkedCount < 12) {
+                cb.checked = true;
+                checkedCount++;
+            }
+        });
+        updateLimitText(checkedCount);
+    }
+
+    function dashSave() {
+        updateLimitText(document.querySelectorAll('.dash-checkbox:checked').length);
+        if (currentSelection.length === 0) {
+            alert("Please select at least one graph (fallback enforced).");
+            return;
+        }
+
+        const btn = document.getElementById('btn-dash-save');
+        btn.disabled = true;
+        btn.textContent = 'Saving...';
+
+        fetch(`/server/${SERVER_ID}/api/dashboard/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken
+            },
+            body: JSON.stringify({ selected_graphs: currentSelection })
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                closeDashboardModal();
+                updateDashboardVisibility(data.selected_graphs, data.is_customized);
+            } else {
+                alert(data.error);
+                btn.disabled = false;
+                btn.textContent = 'Save View';
+            }
+        });
+    }
+
+    function dashResetDefault() {
+        if (!confirm("Are you sure you want to reset to default graphs?")) return;
+        
+        fetch(`/server/${SERVER_ID}/api/dashboard/reset/`, {
+            method: 'POST',
+            headers: { 'X-CSRFToken': csrfToken }
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                closeDashboardModal();
+                updateDashboardVisibility(data.selected_graphs, data.is_customized);
+            }
+        });
+    }
+
+    function updateDashboardVisibility(selected, isCustomized) {
+        // Toggle badge
+        const badge = document.getElementById('custom-view-badge');
+        if(badge) badge.style.display = isCustomized ? 'inline-block' : 'none';
+
+        // Assume all graph card IDs start with 'widget_'
+        const allWidgets = document.querySelectorAll('.widget-card');
+        allWidgets.forEach(widget => {
+            if (selected.includes(widget.id)) {
+                // Determine whether it was a flex layout or block layout
+                // (e.g. doughnut div is flex)
+                if (widget.id === 'widget_mem_dist' || widget.id === 'widget_disk_usage') {
+                    widget.style.display = 'flex';
+                } else {
+                    widget.style.display = 'block';
+                }
+            } else {
+                widget.style.display = 'none';
+            }
+        });
+        setTimeout(() => window.dispatchEvent(new Event('resize')), 50);
+
+        // Hide empty accordions
+        document.querySelectorAll('.accordion-content').forEach(acc => {
+            const hasVisibleWidgets = Array.from(acc.querySelectorAll('.widget-card')).some(w => w.style.display !== 'none');
+            const btn = document.querySelector(`.accordion-btn[onclick="toggleAcc('${acc.id}', this)"]`);
+            if (btn) {
+                // Keep the button visible so they know the category exists
+                btn.style.display = 'flex';
+                
+                // Show empty indicator text inside if desired
+                let emptyState = acc.querySelector('.empty-state-text');
+                if (!hasVisibleWidgets) {
+                    if(!emptyState) {
+                        const div = document.createElement('div');
+                        div.className = 'empty-state-text';
+                        div.style.padding = '1rem';
+                        div.style.color = 'var(--text-muted)';
+                        div.style.fontSize = '0.85rem';
+                        div.style.fontStyle = 'italic';
+                        div.innerHTML = 'No graphs are currently pinned in this category.';
+                        acc.appendChild(div);
+                    } else {
+                        emptyState.style.display = 'block';
+                    }
+                } else {
+                    if (emptyState) emptyState.style.display = 'none';
+                }
+            }
+            if (!hasVisibleWidgets) {
+                acc.classList.remove('active');
+                if (btn) btn.classList.remove('active');
+            }
+        });
+    }
+
+    // dash config loader was moved to the internal promise flow of Chart initialization.
+    // So we do not need the setTimeout here.
 </script>
 {% endblock %}

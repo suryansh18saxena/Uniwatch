@@ -16,4 +16,8 @@ urlpatterns = [
     path('server/<int:server_id>/api/fix/<str:metric_name>/execute/', views.api_fix_execute, name='api_fix_execute'),
     path('server/<int:server_id>/api/fix/history/', views.api_fix_history, name='api_fix_history'),
     path('server/<int:server_id>/api/autofix/toggle/', views.api_toggle_autofix, name='api_toggle_autofix'),
+
+    # Customize Dashboard API
+    path('server/<int:server_id>/api/dashboard/', views.api_dashboard_config, name='api_dashboard_config'),
+    path('server/<int:server_id>/api/dashboard/reset/', views.api_dashboard_reset, name='api_dashboard_reset'),
 ]
