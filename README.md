@@ -303,7 +303,7 @@ This project is licensed under the **MIT License**. See [LICENSE](LICENSE) for d
 
 <div align="center">
 
-Built with ❤️ by Anand Rawat
+Built with ❤️ by Suryansh Saxena
 
 *"Detect → Decide → Act"*
 
