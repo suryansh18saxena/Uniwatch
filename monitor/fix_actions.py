@@ -116,28 +116,46 @@ FIX_ACTIONS = {
         },
         {
             'label': 'Rate-Limit HTTP (port 80)',
-            'command': 'sudo iptables -A INPUT -p tcp --dport 80 -m limit --limit 25/minute --limit-burst 100 -j ACCEPT',
+            'command': 'sudo iptables -D UNIWATCH-DDOS -p tcp --dport 80 -m limit --limit 25/minute --limit-burst 100 -j ACCEPT 2>/dev/null; sudo iptables -A UNIWATCH-DDOS -p tcp --dport 80 -m limit --limit 25/minute --limit-burst 100 -j ACCEPT',
             'severity': 'moderate',
-            'description': 'Limits new connections to port 80 to 25/min with a burst of 100. Mitigates HTTP flood without blocking all traffic.',
+            'description': 'Limits new connections to port 80 to 25/min with a burst of 100.',
         },
         {
             'label': 'Rate-Limit HTTPS (port 443)',
-            'command': 'sudo iptables -A INPUT -p tcp --dport 443 -m limit --limit 25/minute --limit-burst 100 -j ACCEPT',
+            'command': 'sudo iptables -D UNIWATCH-DDOS -p tcp --dport 443 -m limit --limit 25/minute --limit-burst 100 -j ACCEPT 2>/dev/null; sudo iptables -A UNIWATCH-DDOS -p tcp --dport 443 -m limit --limit 25/minute --limit-burst 100 -j ACCEPT',
             'severity': 'moderate',
-            'description': 'Limits new connections to port 443 to 25/min with a burst of 100. Mitigates HTTPS flood.',
+            'description': 'Limits new connections to port 443 to 25/min with a burst of 100.',
         },
         {
             'label': 'Enable SYN Flood Protection',
-            'command': 'sudo sysctl -w net.ipv4.tcp_syncookies=1 && sudo sysctl -w net.ipv4.tcp_max_syn_backlog=2048 && sudo sysctl -w net.ipv4.tcp_synack_retries=2',
+            'command': 'sudo sysctl -w net.ipv4.tcp_syncookies=1 && sudo sysctl -w net.ipv4.tcp_max_syn_backlog=4096 && sudo sysctl -w net.ipv4.tcp_synack_retries=2',
             'severity': 'moderate',
-            'description': 'Enables kernel SYN cookies and tunes the SYN backlog to resist SYN flood attacks. Reversible via sysctl.',
+            'description': 'Enables kernel SYN cookies and tunes the SYN backlog to resist SYN flood attacks.',
         },
         {
-            'label': 'Drop Invalid Packets',
-            'command': 'sudo iptables -A INPUT -m conntrack --ctstate INVALID -j DROP',
+            'label': 'Drop Invalid Packets (RAW)',
+            'command': 'sudo iptables -t raw -D PREROUTING -m conntrack --ctstate INVALID -j DROP 2>/dev/null; sudo iptables -t raw -I PREROUTING -m conntrack --ctstate INVALID -j DROP',
             'severity': 'moderate',
-            'description': 'Drops packets in INVALID conntrack state, which are often part of port scans or malformed attacks.',
+            'description': 'Drops packets in INVALID state at the PRE-ROUTING stage (Zero-CPU Mitigation).',
         },
+        {
+            'label': 'Drop UDP Flood Traffic',
+            'command': 'sudo iptables -D UNIWATCH-DDOS -p udp -m limit --limit 20/s -j ACCEPT 2>/dev/null; sudo iptables -D UNIWATCH-DDOS -p udp -j DROP 2>/dev/null; sudo iptables -A UNIWATCH-DDOS -p udp -m limit --limit 20/s -j ACCEPT && sudo iptables -A UNIWATCH-DDOS -p udp -j DROP',
+            'severity': 'moderate',
+            'description': 'Allows basic UDP (like DNS) but drops massive UDP floods instantly.',
+        },
+        {
+            'label': 'Drop ICMP (Ping) Flood',
+            'command': 'sudo iptables -D UNIWATCH-DDOS -p icmp --icmp-type echo-request -m limit --limit 1/s -j ACCEPT 2>/dev/null; sudo iptables -D UNIWATCH-DDOS -p icmp --icmp-type echo-request -j DROP 2>/dev/null; sudo iptables -A UNIWATCH-DDOS -p icmp --icmp-type echo-request -m limit --limit 1/s -j ACCEPT && sudo iptables -A UNIWATCH-DDOS -p icmp --icmp-type echo-request -j DROP',
+            'severity': 'moderate',
+            'description': 'Limits ping requests to 1 per second and drops the rest to prevent Ping floods.',
+        },
+        {
+            'label': 'Drop Suspicious Large Packets',
+            'command': 'sudo iptables -D UNIWATCH-DDOS -m length --length 1000:65535 -j DROP 2>/dev/null; sudo iptables -A UNIWATCH-DDOS -m length --length 1000:65535 -j DROP',
+            'severity': 'moderate',
+            'description': 'Drops unusually large packets often used in volumetric attacks.',
+        }
     ],
 }
 
