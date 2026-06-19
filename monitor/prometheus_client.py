@@ -188,9 +188,26 @@ def get_server_metrics(ip_address):
     if metrics.get('disk_usage') is not None and metrics['disk_usage'] > 90:
         alerts.append({'severity': 'warning', 'title': 'Storage Capacity', 'message': f"Root partition is {metrics['disk_usage']}% full", 'time': 'Ongoing', 'metric_name': 'disk_usage'})
         
-    # Check Network
-    if metrics.get('network_rx_mbps') is not None and metrics['network_rx_mbps'] > 100:
-        alerts.append({'severity': 'warning', 'title': 'High Network I/O', 'message': f"Ingest rate is {metrics['network_rx_mbps']} MB/s", 'time': 'Recent', 'metric_name': 'network'})
+    # Check Network (Traffic Volume & DDoS Detection)
+    if metrics.get('network_rx_mbps') is not None:
+        # Agar traffic 80 MB/s se zyada hai, toh yeh pakka DDoS/Flood hai
+        if metrics['network_rx_mbps'] > 80:
+            alerts.append({
+                'severity': 'critical', 
+                'title': 'Volumetric DDoS Attack Detected', 
+                'message': f"Massive inbound traffic: {metrics['network_rx_mbps']} MB/s. Executing packet drop rules!", 
+                'time': 'Just now', 
+                'metric_name': 'network_attack'  # Yeh trigger karega aapke drop commands ko
+            })
+        # Agar traffic sirf high hai (e.g., normal heavy usage), toh warning do
+        elif metrics['network_rx_mbps'] > 40:
+            alerts.append({
+                'severity': 'warning', 
+                'title': 'High Network I/O', 
+                'message': f"Ingest rate is {metrics['network_rx_mbps']} MB/s", 
+                'time': 'Recent', 
+                'metric_name': 'network'
+            })
 
     # Check for Network Attack (anomalous connection count)
     if metrics.get('tcp_established') is not None and metrics['tcp_established'] > 500:
