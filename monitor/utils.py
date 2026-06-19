@@ -105,21 +105,32 @@ def _get_cadvisor_commands():
 
 
 def _get_security_hardening_commands():
-    """Commands to apply baseline security rules (like DDoS connection limits)."""
+    """Commands to apply baseline security rules (like DDoS connection limits & Fail2ban)."""
     return [
-        # Ensure iptables is available (works on Debian/Ubuntu/CentOS/RHEL)
-        "sudo apt-get update -y && sudo apt-get install iptables -y || sudo yum install iptables -y || true",
+        # LAYER 1: Core Firewall & Zero-CPU Mitigation (RAW Table)
+        "sudo apt-get update -y && sudo apt-get install iptables fail2ban -y || sudo yum install iptables fail2ban -y || true",
         
-        # 1. Limit concurrent HTTP (80) connections per IP to 50
-        "sudo iptables -A INPUT -p tcp --syn --dport 80 -m connlimit --connlimit-above 50 -j REJECT --reject-with tcp-reset || true",
+        # 0. Create Uniwatch Custom Chain (ensures isolation)
+        "sudo iptables -N UNIWATCH-DDOS 2>/dev/null || true",
+        "sudo iptables -D INPUT -j UNIWATCH-DDOS 2>/dev/null || true",
+        "sudo iptables -I INPUT -j UNIWATCH-DDOS",
         
-        # 2. Limit concurrent HTTPS (443) connections per IP to 50
-        "sudo iptables -A INPUT -p tcp --syn --dport 443 -m connlimit --connlimit-above 50 -j REJECT --reject-with tcp-reset || true",
+        # 1. Drop INVALID packets before Connection Tracking (Saves CPU)
+        "sudo iptables -t raw -I PREROUTING -m conntrack --ctstate INVALID -j DROP || true",
         
-        # 3. Kernel hardening: Enable SYN Flood protection via sysctl
+        # 2. Limit concurrent HTTP (80) & HTTPS (443) connections per IP to 50
+        "sudo iptables -A UNIWATCH-DDOS -p tcp --syn --dport 80 -m connlimit --connlimit-above 50 -j REJECT --reject-with tcp-reset || true",
+        "sudo iptables -A UNIWATCH-DDOS -p tcp --syn --dport 443 -m connlimit --connlimit-above 50 -j REJECT --reject-with tcp-reset || true",
+        
+        # LAYER 2: Kernel Hardening (SYN Flood Protection)
         "sudo sysctl -w net.ipv4.tcp_syncookies=1 || true",
-        "sudo sysctl -w net.ipv4.tcp_max_syn_backlog=2048 || true",
-        "sudo sysctl -w net.ipv4.tcp_synack_retries=2 || true"
+        "sudo sysctl -w net.ipv4.tcp_max_syn_backlog=4096 || true",
+        "sudo sysctl -w net.ipv4.tcp_synack_retries=2 || true",
+        "sudo sysctl -w net.ipv4.tcp_rfc1337=1 || true", # Protect against time-wait assassination hazards
+        
+        # LAYER 3: Fail2Ban Automated Setup
+        "sudo systemctl enable fail2ban || true",
+        "sudo systemctl start fail2ban || true"
     ]
 
 
