@@ -21,11 +21,11 @@ scrape_configs:
       - targets: ['localhost:9090']
 
   # Node Exporter targets — auto-discovered from JSON file
-  # The Django app writes to this file when you add a server.
+  # Django writes to prometheus/targets/ (mounted as /etc/prometheus/targets/ in Docker).
   - job_name: 'node_exporter'
     file_sd_configs:
       - files:
-          - 'prometheus/targets/uniwatch_targets.json'
+          - '/etc/prometheus/targets/uniwatch_targets.json'
         refresh_interval: 5s
     relabel_configs:
       - source_labels: [job]
@@ -36,7 +36,7 @@ scrape_configs:
   - job_name: 'cadvisor'
     file_sd_configs:
       - files:
-          - 'prometheus/targets/uniwatch_targets.json'
+          - '/etc/prometheus/targets/uniwatch_targets.json'
         refresh_interval: 5s
     relabel_configs:
       - source_labels: [job]

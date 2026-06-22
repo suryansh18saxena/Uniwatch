@@ -3,12 +3,12 @@ Prometheus HTTP API client for querying metrics.
 Connects to the local Prometheus instance running via docker-compose.
 """
 
+import os
 import requests
 import time
 from urllib.parse import urljoin
 
-# Prometheus runs locally via docker-compose
-PROMETHEUS_URL = 'http://localhost:9090'
+PROMETHEUS_URL = os.environ.get('PROMETHEUS_URL', 'http://localhost:9090')
 
 
 def query_prometheus(promql_query):
